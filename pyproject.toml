@@ -1,0 +1,87 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "shiden"
+version = "0.1.0"
+description = "Energy market data and BESS intelligence for operators and aggregators"
+requires-python = ">=3.10"
+dependencies = [
+    "pyspark==3.5.1",
+    "delta-spark==3.1.0",
+    "fastapi>=0.111.0",
+    "uvicorn[standard]>=0.30.0",
+    "pydantic>=2.7.0",
+    "pydantic-settings>=2.3.0",
+    "httpx>=0.27.0",
+    "apscheduler>=3.10.0",
+    "scikit-learn>=1.5.0",
+    "pandas>=2.2.0",
+    "numpy>=1.26.0",
+    "deltalake>=0.18.0",
+    "python-dotenv>=1.0.0",
+    "beautifulsoup4>=4.12.0",
+    "lxml>=5.2.0",
+    "entsoe-py>=0.6.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.2.0",
+    "pytest-asyncio>=0.23.0",
+    "ruff>=0.4.0",
+    "mypy>=1.10.0",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/shiden"]
+
+[tool.ruff]
+line-length = 88
+src = ["src"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I"]
+
+[tool.ruff.lint.per-file-ignores]
+# Aligned table-style literals and Field descriptions: readability of the
+# tabular alignment beats the 88-char limit in these files only.
+"src/shiden/api/schemas/__init__.py" = ["E501"]
+"src/shiden/processing/silver/dimensions/dim_production_type.py" = ["E501"]
+"src/shiden/processing/gold/gold_generation_hourly.py" = ["E501"]
+"tests/**" = ["E501"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+# Integration tests need live network + a local Bronze snapshot; they are
+# excluded by default and from CI. Run them with: pytest -m integration
+addopts = "-m 'not integration'"
+markers = [
+    "integration: live network + local Delta snapshot (excluded by default)",
+]
+
+[tool.mypy]
+python_version = "3.10"
+strict = true
+
+[[tool.mypy.overrides]]
+module = [
+    "pyspark.*",
+    "delta.*",
+    "entsoe.*",
+    "apscheduler.*",
+    "pandas.*",
+]
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = ["tests.*", "conftest"]
+disallow_untyped_defs = false
+disallow_incomplete_defs = false
+disallow_untyped_decorators = false
+disallow_untyped_calls = false
+
+[dependency-groups]
+dev = []
