@@ -84,4 +84,6 @@ disallow_untyped_decorators = false
 disallow_untyped_calls = false
 
 [dependency-groups]
-dev = []
+dev = [
+    "ipykernel>=7.3.0",
+]
