@@ -24,6 +24,12 @@ class MarketConfig:
     reporting_currency: str = "EUR"  # target conversion currency for Silver prices
     fx_source: str = "BNR"  # primary FX source: BNR | ECB | SYNTHETIC
     weather_locations: tuple[WeatherLocation, ...] = field(default_factory=tuple)
+    # Peak block in LOCAL wall-clock hours, half-open [start, end).
+    # Market-specific: OPCOM publishes 08:00-20:00, other operators differ.
+    # Defined here rather than baked into the time dimension so a second
+    # market cannot silently inherit Romania's convention.
+    peak_start_hour: int = 8
+    peak_end_hour: int = 20
 
 
 MARKETS: dict[str, MarketConfig] = {

@@ -32,6 +32,11 @@ def _run_safe(name: str, fn: Callable[[], None]) -> None:
         logger.error("Pipeline step %s FAILED: %s", name, exc, exc_info=True)
 
 
+# Days of history refetched on every OPCOM run. Matches the weather job's
+# window so both sources self-heal identically.
+OPCOM_LOOKBACK_DAYS = 7
+
+
 def run_opcom_pzu_daily() -> None:
     """
     Fetch OPCOM PZU (Day-Ahead) raw CSVs to landing, then process into Bronze.
@@ -40,6 +45,13 @@ def run_opcom_pzu_daily() -> None:
     published at ~13:00.  The published results cover the *next* delivery day,
     so 'today' here is the delivery date that was auctioned yesterday.
 
+    Fetches a rolling D-7 → D0 window rather than today alone. A single-day
+    fetch makes every missed run a permanent hole: nothing revisits it, and
+    the gap is invisible until someone queries that date. With a lookback,
+    one week of downtime repairs itself on the next successful run. Days
+    already in the landing zone are skipped, so the extra window costs
+    nothing on a healthy day.
+
     OPCOM is Romania's market operator — this job is deliberately RO-only.
     """
     from shiden.ingestion.opcom import OpcomIngester
@@ -47,14 +59,18 @@ def run_opcom_pzu_daily() -> None:
     from shiden.processing.spark import get_spark
 
     today = date.today()
-    logger.info("Starting daily OPCOM PZU ingest for delivery_date=%s", today)
+    start = today - timedelta(days=OPCOM_LOOKBACK_DAYS)
+    logger.info("Starting daily OPCOM PZU ingest for %s–%s", start, today)
 
-    OpcomIngester().ingest("RO", today, today)
+    report = OpcomIngester().ingest("RO", start, today, skip_existing=True)
+    logger.info("OPCOM ingest: %s", report.summary())
+    for failed_date, reason in report.failed:
+        logger.warning("OPCOM gap remains for %s — %s", failed_date, reason)
 
     spark = get_spark()
-    OpcomBronzeWriter().process("RO", today, today, spark)
+    OpcomBronzeWriter().process("RO", start, today, spark)
 
-    logger.info("Daily OPCOM PZU pipeline complete for delivery_date=%s", today)
+    logger.info("Daily OPCOM PZU pipeline complete for %s–%s", start, today)
 
 
 def run_weather_daily() -> None:
@@ -220,12 +236,14 @@ def run_silver_daily() -> None:
     """
     from shiden.config.markets import MARKETS
     from shiden.processing.silver.dimensions.dim_date import DimDateProcessor
+    from shiden.processing.silver.dimensions.dim_datetime import (
+        DimDateTimeProcessor,
+    )
     from shiden.processing.silver.dimensions.dim_location import DimLocationProcessor
     from shiden.processing.silver.dimensions.dim_market import DimMarketProcessor
     from shiden.processing.silver.dimensions.dim_production_type import (
         DimProductionTypeProcessor,
     )
-    from shiden.processing.silver.dimensions.dim_time import DimTimeProcessor
     from shiden.processing.silver.exchange_rates import ExchangeRatesProcessor
     from shiden.processing.silver.fact_generation import FactGenerationProcessor
     from shiden.processing.silver.fact_load import FactLoadProcessor
@@ -245,7 +263,10 @@ def run_silver_daily() -> None:
         "ExchangeRatesProcessor",
         partial(ExchangeRatesProcessor().process, start, end, spark),
     )
-    _run_safe("DimTimeProcessor", partial(DimTimeProcessor().process, spark))
+    _run_safe(
+        "DimDateTimeProcessor",
+        partial(DimDateTimeProcessor().process, start, end, spark),
+    )
     _run_safe("DimMarketProcessor", partial(DimMarketProcessor().process, spark))
     _run_safe("DimLocationProcessor", partial(DimLocationProcessor().process, spark))
     _run_safe(

@@ -41,6 +41,39 @@ _COL_VOL_TOTAL = 3
 _COL_VOL_BUY = 4
 _COL_VOL_SELL = 5
 
+# Romania moved to 15-minute Market Time Units on 2025-10-01. Before that
+# date OPCOM published 24 hourly intervals; from it, 96 quarter-hourly ones.
+# Both formats have >= 6 columns and identical structure, so nothing about
+# the CSV shape distinguishes them -- an hourly file parses "successfully"
+# and lands 24 rows whose interval numbers are then read downstream as
+# quarter-hour indices, silently compressing a whole day into six hours.
+# Interval *count* is the only reliable discriminator: the "Rezolutie"
+# column that would say so outright is absent from 2025-10-01 files and
+# only appears in later ones.
+MTU_TRANSITION_DATE = date(2025, 10, 1)
+
+RESOLUTION_HOURLY = "PT60M"
+RESOLUTION_QUARTER_HOURLY = "PT15M"
+
+# DST days are short or long, so neither count is fixed:
+#   hourly          23 / 24 / 25 intervals
+#   quarter-hourly  92 / 96 / 100 intervals
+# (verified against OPCOM: 2025-10-26 returns 100, 2026-03-29 returns 92)
+#
+# The two bands do not touch, so a count landing between or outside them is
+# not a resolution question at all -- it means a truncated download or a
+# changed export format, and is rejected on its own terms.
+_HOURLY_RANGE = (23, 25)
+_QUARTER_HOURLY_RANGE = (92, 100)
+
+
+class UnsupportedResolutionError(Exception):
+    """Raised when a CSV is not in the 15-minute resolution Bronze expects.
+
+    Deliberately fatal for the day rather than a warning: writing these rows
+    would corrupt the price series in a way no downstream check would catch.
+    """
+
 _SCHEMA = StructType(
     [
         StructField("market_id", StringType(), nullable=False),
@@ -107,11 +140,20 @@ class OpcomBronzeWriter:
         latest row per key by ingested_at.
         """
         rows: list[OpcomRow] = []
+        rejected: list[date] = []
         ingested_at = datetime.now(timezone.utc)
 
         current = start
         while current <= end:
-            intervals = _load_day(market_id, current)
+            try:
+                intervals = _load_day(market_id, current)
+            except UnsupportedResolutionError as exc:
+                # One bad day must not abort a multi-month backfill, but it
+                # must be loud and it must be reported at the end.
+                logger.error("OpcomBronzeWriter: %s", exc)
+                rejected.append(current)
+                intervals = None
+
             if intervals is not None:
                 rows.extend(
                     _to_rows(
@@ -123,6 +165,14 @@ class OpcomBronzeWriter:
                     )
                 )
             current += timedelta(days=1)
+
+        if rejected:
+            logger.error(
+                "OpcomBronzeWriter: rejected %d day(s) on resolution: %s",
+                len(rejected),
+                ", ".join(d.isoformat() for d in rejected[:10])
+                + (" ..." if len(rejected) > 10 else ""),
+            )
 
         if not rows:
             logger.warning(
@@ -246,7 +296,39 @@ def _parse_csv(raw: str, delivery_date: date) -> list[OpcomInterval]:
         interval = _row_to_interval(row, delivery_date)
         if interval is not None:
             intervals.append(interval)
+
+    if intervals:
+        detect_resolution(intervals, delivery_date)
     return intervals
+
+
+def detect_resolution(intervals: list[OpcomInterval], delivery_date: date) -> str:
+    """Return the CSV's resolution, raising if it is not quarter-hourly.
+
+    Classification is by highest interval number rather than row count, so a
+    file with a missing row still classifies correctly instead of falling
+    into the gap between the two ranges.
+    """
+    highest = max(iv.interval_15min for iv in intervals)
+
+    if _QUARTER_HOURLY_RANGE[0] <= highest <= _QUARTER_HOURLY_RANGE[1]:
+        return RESOLUTION_QUARTER_HOURLY
+
+    if _HOURLY_RANGE[0] <= highest <= _HOURLY_RANGE[1]:
+        raise UnsupportedResolutionError(
+            f"{delivery_date.isoformat()} is an hourly (PT60M) OPCOM export: "
+            f"{highest} intervals. Romania switched to 15-minute MTUs on "
+            f"{MTU_TRANSITION_DATE.isoformat()}; Bronze stores quarter-hourly "
+            "intervals only, and ingesting this file would map each hour onto "
+            "a single 15-minute slot. Backfill from the transition date onward."
+        )
+
+    raise UnsupportedResolutionError(
+        f"{delivery_date.isoformat()} has {highest} intervals, which is neither "
+        f"hourly ({_HOURLY_RANGE[0]}-{_HOURLY_RANGE[1]}) nor quarter-hourly "
+        f"({_QUARTER_HOURLY_RANGE[0]}-{_QUARTER_HOURLY_RANGE[1]}). The download "
+        "is likely truncated, or the OPCOM export format has changed."
+    )
 
 
 def _data_rows(reader: Iterator[list[str]]) -> Iterator[list[str]]:

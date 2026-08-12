@@ -153,12 +153,26 @@ def deduplicate_latest(
 
 
 def with_local_keys(df: DataFrame, timezone: str) -> DataFrame:
-    """Add ``local_ts``, ``date_id`` (YYYYMMDD int) and hour-start ``time_id``
-    columns derived from a UTC ``timestamp_utc`` column."""
+    """Derive local calendar keys plus a UTC hour anchor from ``timestamp_utc``.
+
+    Columns added:
+        local_ts        local wall clock
+        date_id         YYYYMMDD int of the local delivery date
+        time_id         hour-start clock position (local_hour * 4)
+        hour_start_utc  the UTC hour this row belongs to
+
+    ``hour_start_utc`` exists because ``(date_id, time_id)`` is **not** unique
+    on the autumn DST changeover: local 03:00 occurs twice, so two distinct
+    delivery hours collapse onto the same pair. Grouping or merging on that
+    pair averages two real hours into one and leaves the day a delivery hour
+    short, with nothing to signal it happened. The UTC hour is unambiguous, so
+    facts key on it and keep the local columns as labels.
+    """
     return (
         df.withColumn("local_ts", F.from_utc_timestamp("timestamp_utc", timezone))
         .withColumn("date_id", F.date_format("local_ts", "yyyyMMdd").cast("int"))
         .withColumn("time_id", F.hour("local_ts") * 4)
+        .withColumn("hour_start_utc", F.date_trunc("hour", F.col("timestamp_utc")))
     )
 
 

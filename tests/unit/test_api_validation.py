@@ -2,6 +2,10 @@
 
 Validation runs before any Delta read, so these tests exercise the routers
 end-to-end via TestClient without a data lake.
+
+The client carries a wildcard key: these tests are about request validation,
+not authentication, so entitlement must not be what fails them. Auth itself
+is covered in ``test_api_auth.py``.
 """
 
 from __future__ import annotations
@@ -9,12 +13,16 @@ from __future__ import annotations
 import pytest
 from fastapi.testclient import TestClient
 
+from shiden.api.auth.store import ALL_MARKETS, KeyStore
 from shiden.api.main import app
 
 
-@pytest.fixture(scope="module")
-def client() -> TestClient:
-    return TestClient(app)
+@pytest.fixture
+def client(key_store: KeyStore) -> TestClient:
+    secret, _ = key_store.issue_key(
+        name="test-suite", markets=[ALL_MARKETS], rate_limit_per_min=10_000
+    )
+    return TestClient(app, headers={"X-API-Key": secret})
 
 
 class TestHealth:

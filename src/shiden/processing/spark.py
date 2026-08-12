@@ -34,6 +34,11 @@ def get_spark() -> SparkSession:
             .config("spark.driver.memory", "2g")
             .config("spark.sql.shuffle.partitions", "4")  # keep low for local dev
             .config("spark.ui.enabled", "false")
+            # Every timestamp in this project is a UTC instant. Left unset,
+            # Spark interprets naive timestamps in the JVM's default zone, so
+            # the same Delta table would read back differently on a laptop in
+            # Bucharest and a cluster in UTC. Pin it.
+            .config("spark.sql.session.timeZone", "UTC")
         )
         from delta import configure_spark_with_delta_pip
         return configure_spark_with_delta_pip(builder).getOrCreate()

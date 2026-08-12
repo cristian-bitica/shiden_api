@@ -6,7 +6,8 @@ Transforms silver/fact_price (15-min OPCOM) into an hourly Gold table:
   - Averages the four 15-min price slots within each local hour
     (both local-currency and EUR prices).
   - Carries the fx_rate applied (constant within a day).
-  - Joins dim_time to add is_peak and time_label.
+  - Joins dim_datetime on the UTC hour to add is_peak and time_label,
+    so DST days yield 23 or 25 delivery hours rather than always 24.
 
 FX gap-filling is NOT done here: silver/exchange_rates is already
 reconciled and forward-filled (with a lookback seed across window edges),
@@ -27,7 +28,6 @@ from datetime import date
 
 from pyspark.sql import SparkSession
 from pyspark.sql import functions as F
-from pyspark.sql.types import IntegerType
 
 from shiden.config.settings import settings
 from shiden.dates import date_to_id
@@ -39,12 +39,12 @@ _TABLE_PATH = "{base}/gold/price_hourly"
 
 
 class GoldPriceHourlyProcessor:
-    """Build gold/price_hourly from silver fact_price + dim_time."""
+    """Build gold/price_hourly from silver fact_price + dim_datetime."""
 
     def __init__(self) -> None:
         self._table_path = _TABLE_PATH.format(base=settings.delta_base_path)
         self._price_path = f"{settings.delta_base_path}/silver/fact_price"
-        self._time_path = f"{settings.delta_base_path}/silver/dim_time"
+        self._time_path = f"{settings.delta_base_path}/silver/dim_datetime"
 
     def process(
         self, market_id: str, start: date, end: date, spark: SparkSession
@@ -52,7 +52,7 @@ class GoldPriceHourlyProcessor:
         """
         Compute gold/price_hourly for market_id over [start, end] and write.
 
-        Requires silver/fact_price and silver/dim_time.
+        Requires silver/fact_price and silver/dim_datetime.
         """
         start_id = date_to_id(start)
         end_id = date_to_id(end)
@@ -67,36 +67,40 @@ class GoldPriceHourlyProcessor:
             )
         )
 
-        # ── 2. Aggregate 15-min → hourly (time_id = 4 × local_hour) ──────
-        # fact_price uses time_id = interval_15min - 1 (0-95); the four
-        # slots of one hour bucket to the hour-start id: floor(t/4)*4.
-        # floor() is required — Spark `/` is true division, so a bare
-        # (t / 4) * 4 would round-trip every value unchanged.
+        # ── 2. Aggregate 15-min → hourly, bucketed on the UTC hour ────────
+        # Bucketing on the local clock position would merge the two 03:00
+        # hours of the autumn changeover into one and emit 24 rows for a
+        # 25-hour day. The UTC hour is unambiguous, so a DST day correctly
+        # yields 23 or 25 delivery hours.
         price = price.withColumn(
-            "hour_time_id",
-            (F.floor(F.col("time_id") / 4) * 4).cast(IntegerType()),
+            "hour_start_utc", F.date_trunc("hour", F.col("timestamp_utc"))
         )
-        hourly = (
-            price.groupBy("date_id", "hour_time_id", "market_id")
-            .agg(
-                F.avg("price_local_mwh").alias("price_local_mwh"),
-                F.avg("price_eur_mwh").alias("price_eur_mwh"),
-                F.first("fx_rate", ignorenulls=True).alias("fx_rate"),
-            )
-            .withColumnRenamed("hour_time_id", "time_id")
+        hourly = price.groupBy("hour_start_utc", "market_id").agg(
+            F.avg("price_local_mwh").alias("price_local_mwh"),
+            F.avg("price_eur_mwh").alias("price_eur_mwh"),
+            F.first("fx_rate", ignorenulls=True).alias("fx_rate"),
         )
 
-        # ── 3. Join dim_time for is_peak and time_label ───────────────────
-        dim_time = (
+        # ── 3. Resolve labels from dim_datetime at the hour boundary ──────
+        dim_dt = (
             spark.read.format("delta").load(self._time_path)
-            .select("time_id", "is_peak", "time_label")
+            .filter(F.col("is_hour_start"))
+            .select(
+                "market_id",
+                F.col("timestamp_utc").alias("hour_start_utc"),
+                "date_id",
+                F.col("local_time_id").alias("time_id"),
+                "is_peak",
+                "time_label",
+                "is_repeated_hour",
+            )
         )
-        result = hourly.join(dim_time, on="time_id", how="left")
+        result = hourly.join(dim_dt, on=["market_id", "hour_start_utc"], how="left")
 
         incoming_df = result.select(
-            "date_id", "time_id", "market_id",
+            "date_id", "time_id", "hour_start_utc", "market_id",
             "price_local_mwh", "fx_rate", "price_eur_mwh",
-            "is_peak", "time_label",
+            "is_peak", "time_label", "is_repeated_hour",
         )
 
         count = incoming_df.count()

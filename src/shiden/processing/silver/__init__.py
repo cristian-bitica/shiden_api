@@ -2,7 +2,8 @@
 
 Dimensions (static / semi-static, built first):
     dim_date            one row per calendar day; includes EUR/RON FX rate
-    dim_time            96 static rows (15-min intervals)
+    dim_datetime        one row per settlement interval per market
+                        (DST-aware: 92/96/100 rows per local day)
     dim_market          one row per market; from config registry
     dim_production_type ENTSO-E type → category mapping
     dim_location        weather measurement points; from config registry
