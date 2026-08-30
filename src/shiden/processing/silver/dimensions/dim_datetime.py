@@ -1,7 +1,7 @@
 """Silver dimension: dim_datetime.
 
 Replaces the old 96-row ``dim_time``. Grain is one row per settlement
-interval per market -- roughly 35,000 rows per market-year -- rather than
+interval per timezone -- roughly 35,000 rows per zone-year -- rather than
 one row per clock position.
 
 Why the grain changed
@@ -21,17 +21,31 @@ a datetime dimension.
 
 Keys
 ----
-``(market_id, timestamp_utc)`` is the primary key. The UTC instant is the
+``(timezone, timestamp_utc)`` is the primary key. The UTC instant is the
 only safe one: on the fall-back day local 03:00 occurs twice, so
 ``(date_id, local_time_id)`` is genuinely non-unique and anything keyed on it
 collapses two distinct hours into one.
 
-``(market_id, date_id, interval_of_day)`` is an equally valid alternate key
-and is what price data joins on, since OPCOM publishes interval numbers.
+``(timezone, date_id, interval_of_day)`` is an equally valid alternate key and
+is what price data joins on, since OPCOM publishes interval numbers.
 
-Keyed by market rather than by timezone because peak hours are a market
-convention, not a timezone property -- two markets sharing Europe/Bucharest
-could still disagree about what counts as peak.
+Keyed by IANA timezone, not by market. The axis is a property of the zone:
+what instants exist in a local day is decided by the tz rules and nothing
+else. European power markets routinely split one country into several bidding
+zones -- Italy has ~7, Sweden 4, Norway 5, Denmark 2 -- and market-keying
+would store an identical axis once per zone.
+
+Note this does *not* deduplicate two countries with matching rules: Greece is
+Europe/Athens and Romania is Europe/Bucharest, distinct tzdb entries with
+identical offsets, so each keeps its own rows. That is deliberate. Collapsing
+them would mean keying on an offset-rule signature, which silently breaks the
+moment tzdb diverges -- as it would if the EU abolishes seasonal clock
+changes and member states choose differently.
+
+``is_peak`` deliberately does not live here. Peak is a market convention
+(OPCOM publishes 08:00-20:00; other operators differ), so two markets sharing
+a timezone could disagree. Peak bounds live on dim_market and the flag is
+derived where it is used.
 
 Deliberately no ``local_timestamp`` column
 ------------------------------------------
@@ -59,7 +73,7 @@ from pyspark.sql.types import (
     TimestampType,
 )
 
-from shiden.config.markets import MARKETS, get_market
+from shiden.config.markets import MARKETS
 from shiden.config.settings import settings
 from shiden.dates import date_range
 from shiden.processing.delta_io import merge_upsert
@@ -71,7 +85,7 @@ _TABLE_PATH = "{base}/silver/dim_datetime"
 
 _SCHEMA = StructType(
     [
-        StructField("market_id", StringType(), nullable=False),
+        StructField("timezone", StringType(), nullable=False),
         StructField("timestamp_utc", TimestampType(), nullable=False),
         StructField("date_id", IntegerType(), nullable=False),
         StructField("interval_of_day", IntegerType(), nullable=False),
@@ -83,7 +97,6 @@ _SCHEMA = StructType(
         StructField("is_dst", BooleanType(), nullable=False),
         StructField("is_repeated_hour", BooleanType(), nullable=False),
         StructField("is_hour_start", BooleanType(), nullable=False),
-        StructField("is_peak", BooleanType(), nullable=False),
     ]
 )
 
@@ -91,7 +104,7 @@ _SCHEMA = StructType(
 class DateTimeRow(NamedTuple):
     """Mirrors _SCHEMA field-for-field."""
 
-    market_id: str
+    timezone: str
     timestamp_utc: object
     date_id: int
     interval_of_day: int
@@ -103,7 +116,6 @@ class DateTimeRow(NamedTuple):
     is_dst: bool
     is_repeated_hour: bool
     is_hour_start: bool
-    is_peak: bool
 
 
 class DimDateTimeProcessor:
@@ -117,15 +129,19 @@ class DimDateTimeProcessor:
         start: date,
         end: date,
         spark: SparkSession,
-        market_ids: list[str] | None = None,
+        timezones: list[str] | None = None,
     ) -> None:
-        """Generate rows for [start, end] local delivery dates and MERGE."""
-        markets = market_ids if market_ids is not None else list(MARKETS)
-        rows = [
-            row
-            for market_id in markets
-            for row in make_rows(market_id, start, end)
-        ]
+        """Generate rows for [start, end] local delivery dates and MERGE.
+
+        Defaults to the distinct timezones of every configured market, so
+        adding a bidding zone in an existing zone costs nothing.
+        """
+        zones = (
+            timezones
+            if timezones is not None
+            else sorted({cfg.timezone for cfg in MARKETS.values()})
+        )
+        rows = [row for tz_name in zones for row in make_rows(tz_name, start, end)]
 
         if not rows:
             logger.warning(
@@ -138,13 +154,13 @@ class DimDateTimeProcessor:
             spark,
             incoming_df,
             self._table_path,
-            key_cols=("market_id", "timestamp_utc"),
-            partition_cols=("market_id", "date_id"),
+            key_cols=("timezone", "timestamp_utc"),
+            partition_cols=("timezone", "date_id"),
         )
         logger.info(
             "DimDateTimeProcessor: merged %d rows for %s over %s–%s",
             len(rows),
-            ",".join(markets),
+            ",".join(zones),
             start,
             end,
         )
@@ -155,22 +171,16 @@ class DimDateTimeProcessor:
 # ---------------------------------------------------------------------------
 
 
-def make_rows(market_id: str, start: date, end: date) -> list[DateTimeRow]:
-    """Build every interval row for one market over [start, end]."""
-    market = get_market(market_id)
-    tz = ZoneInfo(market.timezone)
+def make_rows(tz_name: str, start: date, end: date) -> list[DateTimeRow]:
+    """Build every interval row for one timezone over [start, end]."""
+    tz = ZoneInfo(tz_name)
 
     rows: list[DateTimeRow] = []
     for local_date in date_range(start, end):
-        for iv in day_intervals(
-            local_date,
-            tz,
-            peak_start_hour=market.peak_start_hour,
-            peak_end_hour=market.peak_end_hour,
-        ):
+        for iv in day_intervals(local_date, tz):
             rows.append(
                 DateTimeRow(
-                    market_id=market_id,
+                    timezone=tz_name,
                     # Naive UTC: the Spark session timezone is pinned to UTC,
                     # so a naive value round-trips as the same instant.
                     timestamp_utc=iv.timestamp_utc.replace(tzinfo=None),
@@ -184,7 +194,6 @@ def make_rows(market_id: str, start: date, end: date) -> list[DateTimeRow]:
                     is_dst=iv.is_dst,
                     is_repeated_hour=iv.is_repeated_hour,
                     is_hour_start=iv.is_hour_start,
-                    is_peak=iv.is_peak,
                 )
             )
     return rows

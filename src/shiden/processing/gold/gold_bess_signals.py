@@ -49,6 +49,7 @@ from pyspark.sql.types import (
 )
 from pyspark.sql.window import Window
 
+from shiden.config.markets import get_market
 from shiden.config.settings import settings
 from shiden.dates import date_to_id
 from shiden.processing.delta_io import replace_date_range
@@ -126,9 +127,10 @@ class GoldBessSignalsProcessor:
         # duplicate every row of that hour and mislabel the rest of the day.
         dim_dt = (
             spark.read.format("delta").load(self._time_path)
-            .select("market_id", "timestamp_utc", "time_label", "is_repeated_hour")
+            .filter(F.col("timezone") == get_market(market_id).timezone)
+            .select("timestamp_utc", "time_label", "is_repeated_hour")
         )
-        price = price.join(dim_dt, on=["market_id", "timestamp_utc"], how="left")
+        price = price.join(dim_dt, on="timestamp_utc", how="left")
 
         # ── 3. Day-level windows for ranking and daily stats ──────────────────
         # timestamp_utc is the secondary sort key so equal prices rank

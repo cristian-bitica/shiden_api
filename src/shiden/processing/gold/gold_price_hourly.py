@@ -29,6 +29,7 @@ from datetime import date
 from pyspark.sql import SparkSession
 from pyspark.sql import functions as F
 
+from shiden.config.markets import get_market
 from shiden.config.settings import settings
 from shiden.dates import date_to_id
 from shiden.processing.delta_io import replace_date_range
@@ -82,20 +83,30 @@ class GoldPriceHourlyProcessor:
         )
 
         # ── 3. Resolve labels from dim_datetime at the hour boundary ──────
+        market = get_market(market_id)
         dim_dt = (
             spark.read.format("delta").load(self._time_path)
-            .filter(F.col("is_hour_start"))
+            .filter((F.col("timezone") == market.timezone) & F.col("is_hour_start"))
             .select(
-                "market_id",
                 F.col("timestamp_utc").alias("hour_start_utc"),
                 "date_id",
                 F.col("local_time_id").alias("time_id"),
-                "is_peak",
+                "local_hour",
                 "time_label",
                 "is_repeated_hour",
             )
         )
-        result = hourly.join(dim_dt, on=["market_id", "hour_start_utc"], how="left")
+        result = hourly.join(dim_dt, on="hour_start_utc", how="left")
+
+        # is_peak is a market convention, not a property of the time axis, so
+        # it is derived here from dim_market's window rather than stored on the
+        # shared dimension where a second market in the same zone would inherit
+        # Romania's hours.
+        result = result.withColumn(
+            "is_peak",
+            (F.col("local_hour") >= F.lit(market.peak_start_hour))
+            & (F.col("local_hour") < F.lit(market.peak_end_hour)),
+        )
 
         incoming_df = result.select(
             "date_id", "time_id", "hour_start_utc", "market_id",

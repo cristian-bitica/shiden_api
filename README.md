@@ -99,12 +99,20 @@ Consequences that shape the schema:
   Facts key on `timestamp_utc` (prices) or `hour_start_utc` (hourly facts);
   local columns are labels only.
 - **`silver/dim_datetime`** replaces the old static 96-row `dim_time`. Grain is
-  one row per settlement interval per market, generated per date range like
-  `dim_date`. It resolves an OPCOM interval number to an instant, a clock
-  label and a peak flag — none of which can be derived arithmetically on a
-  changeover day.
-- **Peak hours live in `MarketConfig`**, not in the dimension, so a second
-  market cannot silently inherit Romania's 08:00–20:00 convention.
+  one row per settlement interval **per IANA timezone**, generated per date
+  range like `dim_date`. It resolves an OPCOM interval number to an instant and
+  a clock label — neither derivable arithmetically on a changeover day.
+- **Keyed by timezone, not market.** The axis is a property of the zone, and
+  European power markets routinely split one country into several bidding
+  zones (Italy ~7, Sweden 4, Norway 5, Denmark 2) that would otherwise store an
+  identical axis each. Note this does *not* merge countries with matching
+  rules — Greece is `Europe/Athens`, Romania `Europe/Bucharest`, identical
+  offsets but distinct tzdb entries. Collapsing those would mean keying on an
+  offset signature, which breaks silently if tzdb diverges (e.g. if the EU
+  abolishes seasonal clock changes and members choose differently).
+- **Peak hours live on `dim_market`** (from `MarketConfig`), not on the shared
+  axis — peak is a market convention, so bidding zones in one timezone may
+  differ. `is_peak` is derived where it is used.
 - **`spark.sql.session.timeZone` is pinned to UTC.** Left unset, the same Delta
   table reads back differently on a laptop in Bucharest and a cluster in UTC.
 

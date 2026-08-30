@@ -194,31 +194,62 @@ class TestIntervalNumbering:
             assert len(wrong) > 75, "expected most of the day to be mislabelled"
 
 
+RO_ZONE = "Europe/Bucharest"
+
+
 class TestDimDateTimeRows:
     def test_row_count_matches_axis(self) -> None:
-        rows = make_rows("RO", FALL_BACK, FALL_BACK)
+        rows = make_rows(RO_ZONE, FALL_BACK, FALL_BACK)
         assert len(rows) == 100
 
     def test_timestamps_are_naive_utc(self) -> None:
         """Session timezone is pinned to UTC; naive values round-trip exactly."""
-        for row in make_rows("RO", NORMAL_WINTER, NORMAL_WINTER):
+        for row in make_rows(RO_ZONE, NORMAL_WINTER, NORMAL_WINTER):
             assert row.timestamp_utc.tzinfo is None
 
     def test_primary_key_is_unique_across_a_dst_day(self) -> None:
-        rows = make_rows("RO", FALL_BACK, FALL_BACK)
-        keys = {(r.market_id, r.timestamp_utc) for r in rows}
+        rows = make_rows(RO_ZONE, FALL_BACK, FALL_BACK)
+        keys = {(r.timezone, r.timestamp_utc) for r in rows}
         assert len(keys) == len(rows)
 
     def test_alternate_key_is_also_unique(self) -> None:
-        rows = make_rows("RO", FALL_BACK, FALL_BACK)
-        keys = {(r.market_id, r.date_id, r.interval_of_day) for r in rows}
+        rows = make_rows(RO_ZONE, FALL_BACK, FALL_BACK)
+        keys = {(r.timezone, r.date_id, r.interval_of_day) for r in rows}
         assert len(keys) == len(rows)
 
     def test_multi_day_range(self) -> None:
-        rows = make_rows("RO", date(2026, 3, 28), date(2026, 3, 30))
+        rows = make_rows(RO_ZONE, date(2026, 3, 28), date(2026, 3, 30))
         assert len(rows) == 96 + 92 + 96
 
-    def test_peak_hours_come_from_market_config(self) -> None:
-        rows = make_rows("RO", NORMAL_WINTER, NORMAL_WINTER)
-        peak_hours = {r.local_hour for r in rows if r.is_peak}
-        assert peak_hours == set(range(8, 20))
+    def test_dimension_carries_no_peak_flag(self) -> None:
+        """Peak is a market convention; it must not live on a shared axis."""
+        assert not hasattr(make_rows(RO_ZONE, NORMAL_WINTER, NORMAL_WINTER)[0], "is_peak")
+
+
+class TestTimezoneKeying:
+    """The axis is a property of the zone, so bidding zones sharing one
+    timezone share rows — the case that motivated dropping market_id."""
+
+    def test_zone_shared_by_many_bidding_zones_is_stored_once(self) -> None:
+        rows = make_rows("Europe/Rome", FALL_BACK, FALL_BACK)
+        assert len({r.timezone for r in rows}) == 1
+
+    def test_identical_rules_still_produce_separate_zones(self) -> None:
+        """Athens and Bucharest agree on every offset but stay distinct keys.
+
+        Deduplicating them would require keying on an offset signature, which
+        breaks silently the moment tzdb diverges.
+        """
+        athens = make_rows("Europe/Athens", FALL_BACK, FALL_BACK)
+        bucharest = make_rows(RO_ZONE, FALL_BACK, FALL_BACK)
+        assert len(athens) == len(bucharest) == 100
+        assert [a.timestamp_utc for a in athens] == [b.timestamp_utc for b in bucharest]
+        assert athens[0].timezone != bucharest[0].timezone
+
+    def test_a_different_axis_really_differs(self) -> None:
+        """Europe/London shifts on different instants from Bucharest."""
+        london = make_rows("Europe/London", FALL_BACK, FALL_BACK)
+        bucharest = make_rows(RO_ZONE, FALL_BACK, FALL_BACK)
+        assert [x.timestamp_utc for x in london] != [
+            x.timestamp_utc for x in bucharest
+        ]

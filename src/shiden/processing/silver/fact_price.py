@@ -122,14 +122,12 @@ class FactPriceProcessor:
         dim_dt = (
             spark.read.format("delta")
             .load(self._dim_datetime_path)
-            .select(
-                "market_id", "date_id", "interval_of_day",
-                "timestamp_utc", "local_time_id",
-            )
+            .filter(F.col("timezone") == market.timezone)
+            .select("date_id", "interval_of_day", "timestamp_utc", "local_time_id")
         )
         before = bronze.count()
         bronze = bronze.join(
-            dim_dt, on=["market_id", "date_id", "interval_of_day"], how="inner"
+            dim_dt, on=["date_id", "interval_of_day"], how="inner"
         )
         after = bronze.count()
         if after < before:
