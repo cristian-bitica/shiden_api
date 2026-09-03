@@ -28,6 +28,7 @@ from pyspark.sql.types import (
     StringType,
     StructField,
     StructType,
+    TimestampType,
 )
 
 from shiden.config.markets import get_market
@@ -46,6 +47,9 @@ _SCHEMA = StructType(
     [
         StructField("date_id", IntegerType(), nullable=False),
         StructField("time_id", IntegerType(), nullable=False),
+        # Grain key: (date_id, time_id) is ambiguous on the autumn DST
+        # changeover, where local 03:00 occurs twice.
+        StructField("hour_start_utc", TimestampType(), nullable=False),
         StructField("market_id", StringType(), nullable=False),
         StructField("actual_load_mw", DoubleType(), nullable=True),
     ]
@@ -94,13 +98,23 @@ class FactLoadProcessor:
         )
 
         # ENTSO-E load is published at 15-min resolution; Silver grain is
-        # hourly.  Average the four 15-min MW values within each local hour so
-        # that the MERGE key (date_id, time_id, market_id) stays unique and the
-        # stored value is the mean load for that hour.
+        # hourly.  Average the four 15-min MW values within each UTC hour.
+        #
+        # Grouped on hour_start_utc rather than (date_id, time_id): the local
+        # pair repeats on the autumn changeover, which would average two
+        # distinct delivery hours together and lose one from the day.
         incoming_df = (
             bronze
-            .groupBy("date_id", "time_id", "market_id")
-            .agg(F.avg("actual_load_mw").alias("actual_load_mw"))
+            .groupBy("hour_start_utc", "market_id")
+            .agg(
+                F.avg("actual_load_mw").alias("actual_load_mw"),
+                F.max("date_id").alias("date_id"),
+                F.max("time_id").alias("time_id"),
+            )
+            .select(
+                "date_id", "time_id", "hour_start_utc", "market_id",
+                "actual_load_mw",
+            )
         )
 
         count = incoming_df.count()
@@ -108,7 +122,7 @@ class FactLoadProcessor:
             spark,
             incoming_df,
             self._table_path,
-            key_cols=("date_id", "time_id", "market_id"),
+            key_cols=("hour_start_utc", "market_id"),
             partition_cols=("market_id", "date_id"),
         )
         logger.info(

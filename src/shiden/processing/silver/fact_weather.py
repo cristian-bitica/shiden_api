@@ -37,6 +37,7 @@ from pyspark.sql.types import (
     StringType,
     StructField,
     StructType,
+    TimestampType,
 )
 
 from shiden.config.markets import get_market
@@ -55,6 +56,9 @@ _SCHEMA = StructType(
     [
         StructField("date_id", IntegerType(), nullable=False),
         StructField("time_id", IntegerType(), nullable=False),
+        # Grain key: (date_id, time_id) is ambiguous on the autumn DST
+        # changeover, where local 03:00 occurs twice.
+        StructField("hour_start_utc", TimestampType(), nullable=False),
         StructField("location_id", IntegerType(), nullable=False),
         StructField("data_type", StringType(), nullable=False),
         StructField("temperature_c", DoubleType(), nullable=True),
@@ -153,6 +157,7 @@ class FactWeatherProcessor:
         incoming_df = joined.select(
             "date_id",
             "time_id",
+            "hour_start_utc",
             "location_id",
             "data_type",
             "temperature_c",
@@ -166,7 +171,7 @@ class FactWeatherProcessor:
             spark,
             incoming_df,
             self._table_path,
-            key_cols=("date_id", "time_id", "location_id", "data_type"),
+            key_cols=("hour_start_utc", "location_id", "data_type"),
             partition_cols=("location_id", "date_id"),
         )
         logger.info(

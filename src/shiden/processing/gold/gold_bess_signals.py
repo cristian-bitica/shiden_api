@@ -49,6 +49,7 @@ from pyspark.sql.types import (
 )
 from pyspark.sql.window import Window
 
+from shiden.config.markets import get_market
 from shiden.config.settings import settings
 from shiden.dates import date_to_id
 from shiden.processing.delta_io import replace_date_range
@@ -81,7 +82,7 @@ _DEFAULT_DISCHARGE_SLOTS = 8
 
 
 class GoldBessSignalsProcessor:
-    """Build gold/bess_signals from silver/fact_price + silver/dim_time."""
+    """Build gold/bess_signals from silver/fact_price + silver/dim_datetime."""
 
     def __init__(
         self,
@@ -90,7 +91,7 @@ class GoldBessSignalsProcessor:
     ) -> None:
         self._table_path     = _TABLE_PATH.format(base=settings.delta_base_path)
         self._price_path     = f"{settings.delta_base_path}/silver/fact_price"
-        self._time_path      = f"{settings.delta_base_path}/silver/dim_time"
+        self._time_path      = f"{settings.delta_base_path}/silver/dim_datetime"
         self.charge_slots    = charge_slots
         self.discharge_slots = discharge_slots
 
@@ -100,7 +101,7 @@ class GoldBessSignalsProcessor:
         """
         Compute gold/bess_signals for market_id over [start, end] and write.
 
-        Requires silver/fact_price and silver/dim_time.  fact_price carries
+        Requires silver/fact_price and silver/dim_datetime.  fact_price carries
         price_eur_mwh converted via silver/exchange_rates (reconciled and
         forward-filled), so EUR prices are NULL only before FX history begins.
         """
@@ -115,25 +116,33 @@ class GoldBessSignalsProcessor:
                 & (F.col("date_id") >= start_id)
                 & (F.col("date_id") <= end_id)
             )
+            # fact_price keys on the instant; the clock position it carries is
+            # named local_time_id. Gold's published column stays time_id.
+            .withColumnRenamed("local_time_id", "time_id")
         )
 
-        # ── 2. Join dim_time for time_label ───────────────────────────────────
-        dim_time = (
+        # ── 2. Join dim_datetime for the clock label ──────────────────────────
+        # Joined on the UTC instant, not on a clock position: on the autumn
+        # changeover local 03:00 occurs twice, so a clock-position join would
+        # duplicate every row of that hour and mislabel the rest of the day.
+        dim_dt = (
             spark.read.format("delta").load(self._time_path)
-            .select("time_id", "time_label")
+            .filter(F.col("timezone") == get_market(market_id).timezone)
+            .select("timestamp_utc", "time_label", "is_repeated_hour")
         )
-        price = price.join(dim_time, on="time_id", how="left")
+        price = price.join(dim_dt, on="timestamp_utc", how="left")
 
         # ── 3. Day-level windows for ranking and daily stats ──────────────────
-        # time_id is a secondary sort key so equal prices rank
-        # deterministically (earlier slot wins) — matching the stable sort
-        # in the pure-Python assign_signals() below.
+        # timestamp_utc is the secondary sort key so equal prices rank
+        # deterministically (earlier slot wins) — matching the stable sort in
+        # the pure-Python assign_signals() below. It replaces time_id, which
+        # is not monotonic across a DST changeover.
         day_window = Window.partitionBy("market_id", "date_id")
         rank_asc_window = day_window.orderBy(
-            F.col("price_eur_mwh").asc_nulls_last(), F.col("time_id").asc()
+            F.col("price_eur_mwh").asc_nulls_last(), F.col("timestamp_utc").asc()
         )
         rank_desc_window = day_window.orderBy(
-            F.col("price_eur_mwh").desc_nulls_last(), F.col("time_id").desc()
+            F.col("price_eur_mwh").desc_nulls_last(), F.col("timestamp_utc").desc()
         )
 
         price = (

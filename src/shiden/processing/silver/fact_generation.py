@@ -9,13 +9,18 @@ Long format is preserved in Silver; wide pivoting is deferred to Gold.
 ENTSO-E timestamps are UTC — converted to Europe/Bucharest local time to
 compute date_id and time_id, matching OPCOM's delivery-day grain.
 
-time_id = local_hour × 4  (always an hour-start: 0, 4, 8, … 92).
-date_id = YYYYMMDD integer from the local delivery date.
+time_id = local_hour × 4  (always an hour-start: 0, 4, 8, … 92) — a *label*.
+date_id = YYYYMMDD integer from the local delivery date — also a label.
 
 Requires silver/dim_production_type to exist (for the FK lookup).
 
-MERGE key: (date_id, time_id, market_id, production_type_id).
+MERGE key: (hour_start_utc, market_id, production_type_id).
 Partition:  (market_id, date_id).
+
+The key is the UTC hour rather than (date_id, time_id) because the latter is
+not unique on the autumn DST changeover — local 03:00 occurs twice, so the
+two delivery hours would merge into one averaged row and the day would end up
+with 24 hours instead of 25.
 """
 
 from __future__ import annotations
@@ -31,6 +36,7 @@ from pyspark.sql.types import (
     StringType,
     StructField,
     StructType,
+    TimestampType,
 )
 
 from shiden.config.markets import get_market
@@ -49,6 +55,9 @@ _SCHEMA = StructType(
     [
         StructField("date_id", IntegerType(), nullable=False),
         StructField("time_id", IntegerType(), nullable=False),
+        # The grain key. (date_id, time_id) is ambiguous on the autumn DST
+        # changeover; this is not.
+        StructField("hour_start_utc", TimestampType(), nullable=False),
         StructField("market_id", StringType(), nullable=False),
         StructField("production_type_id", IntegerType(), nullable=False),
         StructField("actual_mw", DoubleType(), nullable=True),
@@ -139,13 +148,26 @@ class FactGenerationProcessor:
         joined = joined.filter(F.col("production_type_id").isNotNull())
 
         # ENTSO-E generation is published at 15-min resolution; Silver grain is
-        # hourly.  Average the four 15-min MW values within each local hour so
-        # the MERGE key (date_id, time_id, market_id, production_type_id) stays
-        # unique and the stored value is the mean generation for that hour.
+        # hourly.  Average the four 15-min MW values within each hour.
+        #
+        # Grouping is by hour_start_utc, not (date_id, time_id): on the autumn
+        # changeover local 03:00 occurs twice, so the local pair would fold two
+        # distinct delivery hours into a single averaged row and leave that day
+        # with 24 hours instead of 25 -- silent, and invisible downstream.
+        # date_id and time_id ride along as labels via max(), which is safe
+        # because they are constant within a UTC hour.
         incoming_df = (
             joined
-            .groupBy("date_id", "time_id", "market_id", "production_type_id")
-            .agg(F.avg("actual_mw").alias("actual_mw"))
+            .groupBy("hour_start_utc", "market_id", "production_type_id")
+            .agg(
+                F.avg("actual_mw").alias("actual_mw"),
+                F.max("date_id").alias("date_id"),
+                F.max("time_id").alias("time_id"),
+            )
+            .select(
+                "date_id", "time_id", "hour_start_utc", "market_id",
+                "production_type_id", "actual_mw",
+            )
         )
 
         count = incoming_df.count()
@@ -153,7 +175,7 @@ class FactGenerationProcessor:
             spark,
             incoming_df,
             self._table_path,
-            key_cols=("date_id", "time_id", "market_id", "production_type_id"),
+            key_cols=("hour_start_utc", "market_id", "production_type_id"),
             partition_cols=("market_id", "date_id"),
         )
         logger.info(

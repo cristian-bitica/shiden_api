@@ -15,6 +15,7 @@ from typing import NamedTuple
 
 from pyspark.sql import SparkSession
 from pyspark.sql.types import (
+    IntegerType,
     StringType,
     StructField,
     StructType,
@@ -36,6 +37,11 @@ _SCHEMA = StructType(
         StructField("timezone", StringType(), nullable=False),
         StructField("currency", StringType(), nullable=False),
         StructField("reporting_currency", StringType(), nullable=False),
+        # Peak block in local wall-clock hours, half-open [start, end).
+        # Lives here rather than in dim_datetime because peak is a market
+        # convention: bidding zones sharing a timezone may still differ.
+        StructField("peak_start_hour", IntegerType(), nullable=False),
+        StructField("peak_end_hour", IntegerType(), nullable=False),
     ]
 )
 
@@ -47,6 +53,8 @@ class MarketRow(NamedTuple):
     timezone: str
     currency: str
     reporting_currency: str
+    peak_start_hour: int
+    peak_end_hour: int
 
 
 class DimMarketProcessor:
@@ -64,6 +72,8 @@ class DimMarketProcessor:
                 timezone=cfg.timezone,
                 currency=cfg.currency,
                 reporting_currency=cfg.reporting_currency,
+                peak_start_hour=cfg.peak_start_hour,
+                peak_end_hour=cfg.peak_end_hour,
             )
             for mid, cfg in MARKETS.items()
         ]

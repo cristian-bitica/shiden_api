@@ -49,6 +49,85 @@ Health check: http://localhost:8000/health
 uv run python -m shiden.scheduler.runner
 ```
 
+## Backfilling history
+
+The scheduler only ever fetches a window relative to *today*, so history has to
+be loaded explicitly:
+
+```bash
+# Full history from the 15-min MTU transition to yesterday (~315 days)
+uv run python -m shiden.backfill
+
+# Explicit range
+uv run python -m shiden.backfill --from 2025-10-01 --to 2026-08-10
+
+# Re-run transforms only, no network
+uv run python -m shiden.backfill --from 2026-07-01 --to 2026-08-10 --stages silver,gold
+
+# Show the plan without touching anything
+uv run python -m shiden.backfill --dry-run
+```
+
+Runs are **resumable**: landing files already on disk are skipped, so an
+interrupted backfill continues where it stopped. Pass `--refetch` to force.
+Days OPCOM will not serve are collected and reported at the end rather than
+aborting the run — rerun the same command to retry only those.
+
+> **Romania switched to 15-minute Market Time Units on 2025-10-01.** Earlier
+> OPCOM exports contain 24 hourly intervals, structurally identical to the
+> 96-interval quarter-hourly format. Ingesting them would map each hour onto a
+> single 15-minute slot and silently compress a day into six hours, so the
+> Bronze parser rejects them and the backfill refuses `--from` dates before the
+> transition. This is why the default start date is 2025-10-01.
+>
+> DST days are short or long: 2025-10-26 returns 100 intervals and 2026-03-29
+> returns 92. `dim_time` has only 96 rows, so the four extra intervals on the
+> autumn changeover day currently have no dimension row to join to.
+
+## Time model
+
+A delivery day is a **local** day, and on the two DST changeovers it is not 24
+hours long: 23 hours (92 intervals) in spring, 25 hours (100 intervals) in
+autumn. OPCOM numbers intervals by *elapsed slot within the local day*, which
+its own summary block confirms — the 08:00–20:00 peak block is published as
+intervals `33-80` normally, `29-76` on 2026-03-29 and `37-84` on 2025-10-26.
+
+Consequences that shape the schema:
+
+- **The UTC instant is the only safe key.** On the autumn changeover local
+  03:00 occurs twice, so `(date_id, local_time_id)` is genuinely non-unique.
+  Facts key on `timestamp_utc` (prices) or `hour_start_utc` (hourly facts);
+  local columns are labels only.
+- **`silver/dim_datetime`** replaces the old static 96-row `dim_time`. Grain is
+  one row per settlement interval **per IANA timezone**, generated per date
+  range like `dim_date`. It resolves an OPCOM interval number to an instant and
+  a clock label — neither derivable arithmetically on a changeover day.
+- **Keyed by timezone, not market.** The axis is a property of the zone, and
+  European power markets routinely split one country into several bidding
+  zones (Italy ~7, Sweden 4, Norway 5, Denmark 2) that would otherwise store an
+  identical axis each. Note this does *not* merge countries with matching
+  rules — Greece is `Europe/Athens`, Romania `Europe/Bucharest`, identical
+  offsets but distinct tzdb entries. Collapsing those would mean keying on an
+  offset signature, which breaks silently if tzdb diverges (e.g. if the EU
+  abolishes seasonal clock changes and members choose differently).
+- **Peak hours live on `dim_market`** (from `MarketConfig`), not on the shared
+  axis — peak is a market convention, so bidding zones in one timezone may
+  differ. `is_peak` is derived where it is used.
+- **`spark.sql.session.timeZone` is pinned to UTC.** Left unset, the same Delta
+  table reads back differently on a laptop in Bucharest and a cluster in UTC.
+
+`shiden/timeaxis.py` holds the DST rules as pure stdlib code so they are
+unit-tested in isolation; every processor derives its time columns from it.
+
+> **Migration:** the Silver fact schemas and merge keys changed, so
+> `data/delta/silver` and `data/delta/gold` must be rebuilt. Bronze is
+> unaffected. The obsolete `silver/dim_time` table should be deleted.
+>
+> ```bash
+> rm -rf data/delta/silver data/delta/gold
+> uv run python -m shiden.backfill --stages silver,gold
+> ```
+
 ## Testing
 
 ```bash
@@ -68,12 +147,48 @@ uv run mypy src
 
 CI (`.github/workflows/ci.yml`) runs ruff, mypy, and unit tests on every push/PR to `main`.
 
+## API keys & usage metering
+
+Every `/v1` endpoint requires an `X-API-Key` header. `/health` stays open so
+uptime monitors can reach it.
+
+```bash
+# Issue a key scoped to one market
+uv run python -m shiden.api.auth.cli issue --name "Acme Energy" --markets RO --rate-limit 120
+
+# Issue a demo key with access to every market
+uv run python -m shiden.api.auth.cli issue --name "Demo"
+
+uv run python -m shiden.api.auth.cli list
+uv run python -m shiden.api.auth.cli revoke shiden_live_a1b2c3d4
+uv run python -m shiden.api.auth.cli usage --days 7
+```
+
+The secret is displayed **once**, at issuance — only a SHA-256 hash is stored,
+so a leaked key store yields no usable credentials.
+
+Keys are scoped to markets: requesting an unentitled market returns `403`.
+Rate limits are per key, reported on every response via `X-RateLimit-Limit` /
+`X-RateLimit-Remaining`, and return `429` with `Retry-After` when exceeded.
+
+Every `/v1` request is recorded in `usage_events` (key, path, market, status,
+latency) — including rejected ones, since sustained 429s and 403s identify
+clients who have outgrown their plan.
+
+For local work against throwaway data, set `API_AUTH_ENABLED=false` in `.env`.
+Never do this on a reachable host.
+
+> The key store is a SQLite file at `AUTH_DB_PATH` (default `./data/shiden_auth.db`).
+> `data/` is gitignored. In production this file holds live credentials — put it
+> on durable, backed-up storage, or migrate the schema to Postgres.
+
 ## API endpoints
 
-All endpoints are versioned under `/v1/`.
+All endpoints are versioned under `/v1/` and require an API key.
 
 | Endpoint | Description | Status |
 |---|---|---|
+| `/v1/me` | Calling key's identity, entitlements and rate limit | Live |
 | `/v1/prices/{market_id}` | Hourly prices (local + EUR + fx_rate) | Live |
 | `/v1/generation/{market_id}` | Hourly generation mix | Live |
 | `/v1/bess/{market_id}/arbitrage-windows` | Charge/discharge windows | Live |

@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import logging
 import time
+from dataclasses import dataclass, field
 from datetime import date
 from typing import Any
 
@@ -30,6 +31,33 @@ _CSV_URL_TMPL = (
 
 class DataNotAvailableError(Exception):
     """Raised when OPCOM has not yet published data for the requested date."""
+
+
+@dataclass
+class IngestReport:
+    """Outcome of a multi-day ingest.
+
+    A backfill spans hundreds of days across a public website; some of them
+    will fail for reasons that say nothing about the rest (a gap in OPCOM's
+    archive, a transient 5xx). Aborting the run on the first one wastes every
+    day already fetched, so failures are collected and surfaced here instead.
+    """
+
+    fetched: list[date] = field(default_factory=list)
+    skipped: list[date] = field(default_factory=list)
+    failed: list[tuple[date, str]] = field(default_factory=list)
+
+    @property
+    def ok(self) -> bool:
+        return not self.failed
+
+    def summary(self) -> str:
+        parts = [
+            f"fetched={len(self.fetched)}",
+            f"skipped={len(self.skipped)}",
+            f"failed={len(self.failed)}",
+        ]
+        return " ".join(parts)
 
 
 class OpcomIngester:
@@ -63,7 +91,14 @@ class OpcomIngester:
             )
         return {"market_id": market_id, "delivery_dates": results}
 
-    def ingest(self, market_id: str, start: date, end: date) -> None:
+    def ingest(
+        self,
+        market_id: str,
+        start: date,
+        end: date,
+        skip_existing: bool = False,
+        stop_on_error: bool = False,
+    ) -> IngestReport:
         """
         Fetch raw CSVs and save them as-is to the landing zone.
 
@@ -71,30 +106,58 @@ class OpcomIngester:
         data) partway through a range keeps every previously fetched day
         on disk instead of discarding the whole batch.
 
+        Parameters
+        ----------
+        skip_existing:
+            Skip dates already present in the landing zone. Makes a long
+            backfill resumable -- rerun the same range and it picks up where
+            it stopped instead of refetching months of files.
+        stop_on_error:
+            Abort on the first failure instead of collecting it. Off by
+            default so backfills survive isolated gaps; the daily job turns
+            it on, where a failure means today's auction genuinely is missing
+            and should be noticed.
+
         Landing path:
             {landing_base_path}/landing/opcom_pzu/{market_id}/{YYYY-MM-DD}.csv
         """
-        saved = 0
-        for current in date_range(start, end):
-            if saved:
-                time.sleep(settings.opcom_rate_limit_sleep)
-            _, raw_csv = self._fetch_day(current)
+        report = IngestReport()
 
+        for current in date_range(start, end):
             landing_path = opcom_pzu_csv_path(
                 settings.landing_base_path, market_id, current
             )
+
+            if skip_existing and landing_path.exists():
+                report.skipped.append(current)
+                continue
+
+            if report.fetched:
+                time.sleep(settings.opcom_rate_limit_sleep)
+
+            try:
+                _, raw_csv = self._fetch_day(current)
+            except Exception as exc:  # noqa: BLE001 - recorded, then continue
+                reason = f"{type(exc).__name__}: {exc}"
+                logger.warning("OPCOM ingest: %s failed — %s", current, reason)
+                report.failed.append((current, reason))
+                if stop_on_error:
+                    raise
+                continue
+
             landing_path.parent.mkdir(parents=True, exist_ok=True)
             landing_path.write_text(raw_csv, encoding="utf-8")
-            saved += 1
+            report.fetched.append(current)
             logger.info("OPCOM landing: saved %s", landing_path)
 
         logger.info(
-            "OPCOM ingest complete: market=%s start=%s end=%s files=%d",
+            "OPCOM ingest complete: market=%s start=%s end=%s %s",
             market_id,
             start.isoformat(),
             end.isoformat(),
-            saved,
+            report.summary(),
         )
+        return report
 
     # ------------------------------------------------------------------
     # Internal helpers

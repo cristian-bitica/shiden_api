@@ -2,7 +2,7 @@
 
 No network access, no Spark.  Tests pure-Python functions from:
   - silver.dimensions.dim_date
-  - silver.dimensions.dim_time
+  - silver.dimensions.dim_datetime (see tests/unit/test_timeaxis.py)
   - silver.dimensions.dim_production_type
   - silver.dimensions.dim_location
 """
@@ -31,11 +31,6 @@ from shiden.processing.silver.dimensions.dim_production_type import (
 )
 from shiden.processing.silver.dimensions.dim_production_type import (
     _build_rows as _build_pt_rows,
-)
-from shiden.processing.silver.dimensions.dim_time import (
-    _PEAK_END,
-    _PEAK_START,
-    _make_time_rows,
 )
 
 # ---------------------------------------------------------------------------
@@ -196,64 +191,6 @@ class TestMakeDateRow:
         assert _make_date_row(date(2024, 4, 1), self.holidays).quarter == 2
         assert _make_date_row(date(2024, 7, 1), self.holidays).quarter == 3
         assert _make_date_row(date(2024, 10, 1), self.holidays).quarter == 4
-
-
-# ---------------------------------------------------------------------------
-# dim_time helpers
-# ---------------------------------------------------------------------------
-
-
-class TestMakeTimeRows:
-    def setup_method(self):
-        self.rows = _make_time_rows()
-
-    def test_exactly_96_rows(self):
-        assert len(self.rows) == 96
-
-    def test_time_ids_0_to_95(self):
-        assert [r.time_id for r in self.rows] == list(range(96))
-
-    def test_first_row(self):
-        r = self.rows[0]
-        assert r.hour == 0
-        assert r.quarter_of_hour == 0
-        assert r.minute_of_day == 0
-        assert r.time_label == "00:00"
-        assert r.is_hour_start is True
-
-    def test_last_row(self):
-        r = self.rows[95]
-        assert r.hour == 23
-        assert r.quarter_of_hour == 3
-        assert r.minute_of_day == 1425
-        assert r.time_label == "23:45"
-        assert r.is_hour_start is False
-
-    def test_hour_start_every_4_intervals(self):
-        hour_starts = [r.time_id for r in self.rows if r.is_hour_start]
-        assert hour_starts == list(range(0, 96, 4))
-        assert len(hour_starts) == 24
-
-    def test_peak_start(self):
-        assert self.rows[_PEAK_START].time_label == "08:00"
-
-    def test_peak_end(self):
-        assert self.rows[_PEAK_END].time_label == "19:45"
-
-    def test_peak_count(self):
-        peak_rows = [r for r in self.rows if r.is_peak]
-        assert len(peak_rows) == _PEAK_END - _PEAK_START + 1
-
-    def test_non_peak_outside_window(self):
-        assert self.rows[0].is_peak is False   # 00:00
-        assert self.rows[31].is_peak is False  # 07:45
-        assert self.rows[80].is_peak is False  # 20:00
-        assert self.rows[95].is_peak is False  # 23:45
-
-    def test_all_hour_labels_24_values(self):
-        labels_at_hour_start = [r.time_label for r in self.rows if r.is_hour_start]
-        expected = [f"{h:02d}:00" for h in range(24)]
-        assert labels_at_hour_start == expected
 
 
 # ---------------------------------------------------------------------------

@@ -15,12 +15,24 @@ Market-agnostic price columns:
     price_eur_mwh    price_local_mwh / fx_rate; NULL only when no rate
                      exists at all (before FX history begins)
 
-time_id = interval_15min - 1  (OPCOM intervals are 1-indexed, local time).
-date_id = YYYYMMDD integer from OPCOM delivery_date (already local).
+Time columns
+------------
+OPCOM numbers intervals by *elapsed slot within the local delivery day*, not
+by clock position -- its own peak label moves with DST (33-80 normally, 29-76
+on 2026-03-29, 37-84 on 2025-10-26). So ``interval_of_day`` is carried as
+published and the clock position is resolved by joining silver/dim_datetime
+rather than assumed to be ``interval - 1``, which is only true on the 363
+days a year with no changeover.
 
-Requires silver/exchange_rates for the market's currency.
+    interval_of_day  1-based OPCOM interval (1-92 / 1-96 / 1-100)
+    timestamp_utc    the instant — the grain key
+    local_time_id    clock position 0-95; NOT unique on the autumn changeover
+    date_id          YYYYMMDD of the local delivery date
 
-MERGE key: (date_id, time_id, market_id).
+Requires silver/exchange_rates for the market's currency and
+silver/dim_datetime for the time resolution.
+
+MERGE key: (market_id, timestamp_utc).
 Partition:  (market_id, date_id).
 """
 
@@ -37,6 +49,7 @@ from pyspark.sql.types import (
     StringType,
     StructField,
     StructType,
+    TimestampType,
 )
 
 from shiden.config.markets import get_market
@@ -50,7 +63,10 @@ _TABLE_PATH = "{base}/silver/fact_price"
 _SCHEMA = StructType(
     [
         StructField("date_id", IntegerType(), nullable=False),
-        StructField("time_id", IntegerType(), nullable=False),
+        StructField("interval_of_day", IntegerType(), nullable=False),
+        # The grain key.
+        StructField("timestamp_utc", TimestampType(), nullable=False),
+        StructField("local_time_id", IntegerType(), nullable=False),
         StructField("market_id", StringType(), nullable=False),
         StructField("price_local_mwh", DoubleType(), nullable=True),
         StructField("fx_rate", DoubleType(), nullable=True),
@@ -67,6 +83,7 @@ class FactPriceProcessor:
         self._table_path = _TABLE_PATH.format(base=settings.delta_base_path)
         self._bronze_path = f"{settings.delta_base_path}/bronze/opcom_pzu_prices"
         self._fx_path = f"{settings.delta_base_path}/silver/exchange_rates"
+        self._dim_datetime_path = f"{settings.delta_base_path}/silver/dim_datetime"
 
     def process(
         self, market_id: str, start: date, end: date, spark: SparkSession
@@ -97,7 +114,30 @@ class FactPriceProcessor:
 
         bronze = bronze.withColumn(
             "date_id", F.date_format("delivery_date", "yyyyMMdd").cast("int")
-        ).withColumn("time_id", F.col("interval_15min") - 1)
+        ).withColumnRenamed("interval_15min", "interval_of_day")
+
+        # Resolve the interval number to an instant and a clock position via
+        # dim_datetime. Deriving them arithmetically (time_id = interval - 1)
+        # is wrong on both DST changeovers, by an hour, in opposite directions.
+        dim_dt = (
+            spark.read.format("delta")
+            .load(self._dim_datetime_path)
+            .filter(F.col("timezone") == market.timezone)
+            .select("date_id", "interval_of_day", "timestamp_utc", "local_time_id")
+        )
+        before = bronze.count()
+        bronze = bronze.join(
+            dim_dt, on=["date_id", "interval_of_day"], how="inner"
+        )
+        after = bronze.count()
+        if after < before:
+            # Almost always means dim_datetime has not been generated for this
+            # range yet. Silently dropping prices would be far worse.
+            logger.warning(
+                "FactPriceProcessor: %d of %d intervals had no dim_datetime row "
+                "for %s %s–%s — run DimDateTimeProcessor for this range",
+                before - after, before, market_id, start_str, end_str,
+            )
 
         # EUR→local rate for this market's settlement currency.
         # silver/exchange_rates is already reconciled + forward-filled.
@@ -124,8 +164,8 @@ class FactPriceProcessor:
         ).withColumnRenamed("price_lei_mwh", "price_local_mwh")
 
         incoming_df = joined.select(
-            "date_id", "time_id", "market_id",
-            "price_local_mwh", "fx_rate", "price_eur_mwh",
+            "date_id", "interval_of_day", "timestamp_utc", "local_time_id",
+            "market_id", "price_local_mwh", "fx_rate", "price_eur_mwh",
         )
 
         count = incoming_df.count()
@@ -133,7 +173,7 @@ class FactPriceProcessor:
             spark,
             incoming_df,
             self._table_path,
-            key_cols=("date_id", "time_id", "market_id"),
+            key_cols=("market_id", "timestamp_utc"),
             partition_cols=("market_id", "date_id"),
         )
         logger.info(
