@@ -13,7 +13,34 @@ Energy market data and BESS (Battery Energy Storage System) intelligence API for
 - **Package manager:** [uv](https://github.com/astral-sh/uv)
 - **Production target:** Azure Databricks
 
-See [docs/architecture.md](docs/architecture.md) for full architecture, data sources, and schema details.
+See [docs/architecture.md](docs/architecture.md) for full architecture, data sources, and schema details, and [docs/diagrams.md](docs/diagrams.md) for the system, lineage, star-schema and request-path diagrams.
+
+## Documentation
+
+The full technical documentation is a Sphinx site: hand-written guides plus an
+API reference generated from the source docstrings, and Mermaid architecture
+diagrams that render both here on GitHub and in the built site.
+
+```bash
+uv sync --extra docs
+uv run sphinx-build -b html docs docs/_build/html   # → docs/_build/html/index.html
+# or, from docs/:  make html   (make strict = warnings as errors, as in CI)
+```
+
+| Page | Contents |
+|---|---|
+| `docs/getting-started.md` | Install, configure, run the API and scheduler |
+| `docs/api-guide.md` | Auth, entitlements, rate limits, endpoints, errors |
+| `docs/operations.md` | Schedule, backfills, key management, testing, CI |
+| `docs/architecture.md` | Medallion pipeline, sources, deployment targets |
+| `docs/diagrams.md` | Mermaid: context, lineage, star schema, request path |
+| `docs/time-model.md` | DST rules and why the UTC instant is the only safe key |
+| `docs/silver_schema.md` | Kimball star schema column reference |
+| `docs/reference/` | Auto-generated reference for every `shiden` module |
+
+The build also dumps the live FastAPI contract to
+`docs/_build/html/_static/openapi.json`, so the machine-readable spec cannot
+drift from the code.
 
 ## Prerequisites
 
@@ -145,7 +172,8 @@ uv run ruff check src tests
 uv run mypy src
 ```
 
-CI (`.github/workflows/ci.yml`) runs ruff, mypy, and unit tests on every push/PR to `main`.
+CI (`.github/workflows/ci.yml`) runs ruff, mypy, the unit tests, and a strict
+docs build (`sphinx-build -W`) on every push/PR to `main`.
 
 ## API keys & usage metering
 
@@ -208,7 +236,7 @@ src/shiden/
 │   ├── silver/     Bronze → Silver (Kimball star schema)
 │   └── gold/       Silver → Gold (BESS signals, API-ready tables)
 └── scheduler/      Job definitions + local APScheduler runner
-docs/               Architecture and pipeline instructions
+docs/               Sphinx site: guides, architecture, diagrams, API reference
 tests/
 ├── unit/           No network / no Spark required
 └── integration/    Live network + local Delta snapshot
