@@ -1,0 +1,19 @@
+/* Wide tables (schema and endpoint references) scroll rather than overflow. */
+.rst-content table.docutils,
+article table {
+  display: block;
+  overflow-x: auto;
+  max-width: 100%;
+}
+
+/* The architecture doc uses ASCII box diagrams inside fenced blocks; keep them
+   from wrapping, which would scramble the alignment. */
+article pre {
+  white-space: pre;
+  overflow-x: auto;
+}
+
+/* Slightly denser API signatures — the processors have long ones. */
+dl.py dt {
+  font-size: 0.95em;
+}

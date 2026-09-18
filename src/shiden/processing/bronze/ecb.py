@@ -69,9 +69,11 @@ class EcbBronzeWriter:
         """
         Parse landing JSON files for [start, end] and append to Bronze.
 
-        Reads:  {landing_base_path}/landing/ecb_fx_rates/{YYYY-MM-DD}.json
-        Writes: {delta_base_path}/bronze/ecb_fx_rates
-                (Delta, partitioned by quote_currency)
+        ::
+
+            Reads:  {landing_base_path}/landing/ecb_fx_rates/{YYYY-MM-DD}.json
+            Writes: {delta_base_path}/bronze/ecb_fx_rates
+                    (Delta, partitioned by quote_currency)
 
         Append-only with revision capture on (date, quote_currency) keyed
         value (rate) — safe to re-run.

@@ -99,8 +99,10 @@ class WeatherIngester:
         """
         Fetch raw weather JSON for all locations and save to the landing zone.
 
-        Landing path:
+        Landing path::
+
             {landing_base_path}/landing/weather/{market_id}/{location}/{YYYY-MM-DD}.json
+
         One file per location per day. Includes source_url for Bronze lineage.
         """
         # Fetch the full range per location in one API call (Open-Meteo supports ranges)

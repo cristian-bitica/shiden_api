@@ -13,7 +13,34 @@ Energy market data and BESS (Battery Energy Storage System) intelligence API for
 - **Package manager:** [uv](https://github.com/astral-sh/uv)
 - **Production target:** Azure Databricks
 
-See [docs/architecture.md](docs/architecture.md) for full architecture, data sources, and schema details.
+See [docs/architecture.md](docs/architecture.md) for full architecture, data sources, and schema details, and [docs/diagrams.md](docs/diagrams.md) for the system, lineage, star-schema and request-path diagrams.
+
+## Documentation
+
+The full technical documentation is a Sphinx site: hand-written guides plus an
+API reference generated from the source docstrings, and Mermaid architecture
+diagrams that render both here on GitHub and in the built site.
+
+```bash
+uv sync --extra docs
+uv run sphinx-build -b html docs docs/_build/html   # → docs/_build/html/index.html
+# or, from docs/:  make html   (make strict = warnings as errors, as in CI)
+```
+
+| Page | Contents |
+|---|---|
+| `docs/getting-started.md` | Install, configure, run the API and scheduler |
+| `docs/api-guide.md` | Auth, entitlements, rate limits, endpoints, errors |
+| `docs/operations.md` | Schedule, backfills, key management, testing, CI |
+| `docs/architecture.md` | Medallion pipeline, sources, deployment targets |
+| `docs/diagrams.md` | Mermaid: context, lineage, star schema, request path |
+| `docs/time-model.md` | DST rules and why the UTC instant is the only safe key |
+| `docs/silver_schema.md` | Kimball star schema column reference |
+| `docs/reference/` | Auto-generated reference for every `shiden` module |
+
+The build also dumps the live FastAPI contract to
+`docs/_build/html/_static/openapi.json`, so the machine-readable spec cannot
+drift from the code.
 
 ## Prerequisites
 
@@ -145,7 +172,43 @@ uv run ruff check src tests
 uv run mypy src
 ```
 
-CI (`.github/workflows/ci.yml`) runs ruff, mypy, and unit tests on every push/PR to `main`.
+CI (`.github/workflows/ci.yml`) runs ruff, mypy, the unit tests, and a strict
+docs build (`sphinx-build -W`) on every push/PR to `main`.
+
+## API keys & usage metering
+
+Every `/v1` endpoint requires an `X-API-Key` header. `/health` stays open so
+uptime monitors can reach it.
+
+```bash
+# Issue a key scoped to one market
+uv run python -m shiden.api.auth.cli issue --name "Acme Energy" --markets RO --rate-limit 120
+
+# Issue a demo key with access to every market
+uv run python -m shiden.api.auth.cli issue --name "Demo"
+
+uv run python -m shiden.api.auth.cli list
+uv run python -m shiden.api.auth.cli revoke shiden_live_a1b2c3d4
+uv run python -m shiden.api.auth.cli usage --days 7
+```
+
+The secret is displayed **once**, at issuance — only a SHA-256 hash is stored,
+so a leaked key store yields no usable credentials.
+
+Keys are scoped to markets: requesting an unentitled market returns `403`.
+Rate limits are per key, reported on every response via `X-RateLimit-Limit` /
+`X-RateLimit-Remaining`, and return `429` with `Retry-After` when exceeded.
+
+Every `/v1` request is recorded in `usage_events` (key, path, market, status,
+latency) — including rejected ones, since sustained 429s and 403s identify
+clients who have outgrown their plan.
+
+For local work against throwaway data, set `API_AUTH_ENABLED=false` in `.env`.
+Never do this on a reachable host.
+
+> The key store is a SQLite file at `AUTH_DB_PATH` (default `./data/shiden_auth.db`).
+> `data/` is gitignored. In production this file holds live credentials — put it
+> on durable, backed-up storage, or migrate the schema to Postgres.
 
 ## API keys & usage metering
 
@@ -208,7 +271,7 @@ src/shiden/
 │   ├── silver/     Bronze → Silver (Kimball star schema)
 │   └── gold/       Silver → Gold (BESS signals, API-ready tables)
 └── scheduler/      Job definitions + local APScheduler runner
-docs/               Architecture and pipeline instructions
+docs/               Sphinx site: guides, architecture, diagrams, API reference
 tests/
 ├── unit/           No network / no Spark required
 └── integration/    Live network + local Delta snapshot

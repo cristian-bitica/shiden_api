@@ -6,6 +6,23 @@ Shiden is an energy market data API targeting **BESS (Battery Energy Storage Sys
 
 **Initial market:** Romania. **Architecture is multi-market from day one** — adding a new market is config-only with zero code changes.
 
+```mermaid
+flowchart LR
+    EXT["External sources<br/><i>OPCOM · Open-Meteo<br/>BNR · ECB · ENTSO-E</i>"]
+    ING["shiden.ingestion<br/><i>fetch only</i>"]
+    MED["Landing → Bronze → Silver → Gold<br/><i>PySpark + Delta Lake</i>"]
+    API["shiden.api<br/><i>FastAPI over delta-rs</i>"]
+    CLI["BESS operators<br/>and aggregators"]
+    SCH["shiden.scheduler<br/><i>APScheduler / Databricks Workflows</i>"]
+
+    EXT --> ING --> MED --> API --> CLI
+    SCH -.->|triggers| ING
+    SCH -.->|triggers| MED
+```
+
+Full lineage, star schema, request path and deployment diagrams:
+[System diagrams](diagrams.md).
+
 ---
 
 ## Tech Stack
@@ -233,7 +250,7 @@ tables, no snowflaking. Full schema reference: [docs/silver_schema.md](silver_sc
 | Table | Grain | Key notes |
 |---|---|---|
 | `silver/dim_date` | 1 row/day | Calendar-only (holidays incl. Jan 6+7 from 2024); FX lives in exchange_rates |
-| `silver/dim_time` | 96 rows (static) | 15-min intervals 0–95; `is_hour_start` flag for hourly joins |
+| `silver/dim_datetime` | 1 row/interval × IANA timezone | Generated per date range; resolves an OPCOM interval number to a UTC instant and a clock label. Replaced the static 96-row `dim_time`, which could not represent a DST changeover day — see [Time model](time-model.md) |
 | `silver/dim_market` | 1 row/market | Bidding zone, timezone, currency, name (all from config) |
 | `silver/dim_production_type` | ~20 rows (semi-static) | ENTSO-E type → category flags; discovered types get stable surrogate IDs (never renumbered) |
 | `silver/dim_location` | 1 row/weather point | Lat/lon + aggregation weights for national signal |
@@ -252,7 +269,7 @@ tables, no snowflaking. Full schema reference: [docs/silver_schema.md](silver_sc
 
 **Market-agnostic price columns:** `fact_price` stores `price_local_mwh`, the applied `fx_rate` (from `silver/exchange_rates`) and the derived `price_eur_mwh`. The settlement currency itself lives in `dim_market` — no market-specific column names anywhere in Silver/Gold/API.
 
-**15-min ↔ hourly cross-grain join:** `dim_time.is_hour_start` and `time_id = hour × 4` map any price interval to its corresponding generation/load/weather row. Gold handles this join; Silver does not pre-aggregate.
+**15-min ↔ hourly cross-grain join:** `dim_datetime.is_hour_start` maps any price interval to its corresponding generation/load/weather row; facts join on the UTC instant (`timestamp_utc` / `hour_start_utc`), never on a local clock position. Gold handles this join; Silver does not pre-aggregate.
 
 **Long-format generation stays long in Silver:** `fact_generation` is one row per (timestamp, production_type). Pivoting to wide format is a Gold-layer concern.
 
@@ -262,13 +279,15 @@ tables, no snowflaking. Full schema reference: [docs/silver_schema.md](silver_sc
 
 ## Gold Layer
 
-Gold produces BESS-specific signals from `silver/prices_weather`.
+Gold produces API-shaped tables from the Silver facts. `gold/bess_signals` reads `silver/fact_price` directly rather than `gold/price_hourly`, so signals keep the 15-minute granularity of OPCOM day-ahead settlement.
 
 | Table | Description |
 |---|---|
-| `gold/arbitrage_windows` | Ranked charge/discharge window pairs by price spread (EUR/MWh) per delivery day |
-| `gold/bess_signals` | Hourly signal: -1 charge, 0 idle, +1 discharge |
-| `gold/price_forecast` | Next-day hourly price forecast (scikit-learn, weather features → price) with confidence intervals |
+| `gold/price_hourly` | ✅ Hourly prices: `price_local_mwh`, applied `fx_rate`, `price_eur_mwh`, `is_peak` |
+| `gold/generation_hourly` | ✅ Hourly generation mix, pivoted wide from long-format `silver/fact_generation` |
+| `gold/bess_signals` | ✅ 15-min signal: -1 charge, 0 idle, +1 discharge, plus daily ranks and spread |
+| `gold/arbitrage_windows` | ⬜ Not materialised — windows are contiguous signal runs, derived per request from `gold/bess_signals` |
+| `gold/price_forecast` | ⬜ Planned — next-day forecast (scikit-learn, weather features → price) |
 
 ---
 
@@ -342,7 +361,7 @@ shiden_api/
 │   │   ├── bronze/             Landing → Bronze (append + revision capture) ✅ all 5
 │   │   ├── silver/             Bronze → Silver (Kimball star schema) ✅
 │   │   │   ├── exchange_rates.py   Unified reconciled FX (BNR/ECB/SYNTHETIC + fill)
-│   │   │   ├── dimensions/         dim_date, dim_time, dim_market,
+│   │   │   ├── dimensions/         dim_date, dim_datetime, dim_market,
 │   │   │   │                       dim_production_type, dim_location
 │   │   │   ├── fact_price.py       15-min × market, local + fx_rate + EUR
 │   │   │   ├── fact_generation.py  hourly × type × market

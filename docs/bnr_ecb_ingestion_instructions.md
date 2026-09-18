@@ -208,7 +208,7 @@ ECB publishes all history in one file. Download it once per day during the daily
 
 Download the full XML, parse it in memory, extract per-date rate dictionaries, write one JSON file per date:
 
-```json
+```text
 {
     "date": "2024-01-15",
     "rates": {"USD": 1.0921, "GBP": 0.8567, "RON": 4.9698, ...},

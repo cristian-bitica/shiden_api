@@ -67,7 +67,8 @@ class OpcomIngester:
         """
         Download raw PZU CSV text for each date in [start, end] (inclusive).
 
-        Returns a dict with:
+        Returns a dict with::
+
             market_id: str
             delivery_dates: list of dicts, each containing:
                 date:       str  — ISO delivery date

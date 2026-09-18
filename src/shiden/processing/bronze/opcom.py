@@ -130,9 +130,11 @@ class OpcomBronzeWriter:
         """
         Append landing CSV files for [start, end] into the Bronze Delta table.
 
-        Reads:  {landing_base_path}/landing/opcom_pzu/{market_id}/{YYYY-MM-DD}.csv
-        Writes: {delta_base_path}/bronze/opcom_pzu_prices
-                (Delta, partitioned by market_id, delivery_date)
+        ::
+
+            Reads:  {landing_base_path}/landing/opcom_pzu/{market_id}/{YYYY-MM-DD}.csv
+            Writes: {delta_base_path}/bronze/opcom_pzu_prices
+                    (Delta, partitioned by market_id, delivery_date)
 
         Append-only with revision capture on
         (market_id, delivery_date, interval_15min): unchanged re-runs write
