@@ -1,0 +1,1495 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SwarmForge Pack</title>
+<style>
+:root{--bg:#eef0eb;--panel:#fbfbf8;--ink:#1e221f;--muted:#68726c;--line:#d5d9d2;--line-soft:#e8ebe5;--accent:#3d5a45;--amber:#c9851a;--amber-bg:#fff6e5;--red:#9b1c1c;--green:#2f6b3a;--green-bg:#e7f3ea;--chip:#e8eee9;--card:#fffef9;--rail:340px;--card-min-w:148px;--card-min-h:72px;--card-max-w:200px;font-family:ui-sans-serif,system-ui,sans-serif}
+*{box-sizing:border-box}html,body{height:100%;margin:0}
+body{background:#cfd4cc;color:var(--ink);height:100vh;display:flex;flex-direction:column;overflow:hidden}
+.cockpit{flex:1;min-width:0;min-height:0;width:calc(100% - 20px);margin:10px;background:var(--bg);border:1px solid #b8bfb6;border-radius:12px;display:flex;flex-direction:column;overflow:hidden}
+header.top{display:flex;gap:12px;align-items:center;padding:10px 14px;background:#f4f5f1;border-bottom:1px solid var(--line);flex-wrap:wrap}
+header.top h1{margin:0;font-size:15px}.meta{color:var(--muted);font-size:12px}.meta .dot{color:var(--green)}.spacer{flex:1}
+.pack-identity,.pack-actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.error{color:var(--red);padding:0 14px;font-size:12px;min-height:1em}
+.btn{border:1px solid #9aa59e;background:#fff;color:var(--ink);padding:5px 10px;border-radius:7px;font-size:12px;cursor:pointer}
+.btn:hover,.btn:focus-visible{background:#f0f2ee;color:var(--ink);border-color:#8a9188}
+.btn:active{background:#d5d9d2;color:#000;border-color:#6a726c;transform:translateY(1px)}
+.btn-danger{border-color:#c45c5c;color:var(--red);background:#fff}
+.btn-danger:hover{background:#fdf0f0}
+.btn-primary{background:var(--accent);border-color:var(--accent);color:#fff}
+.btn-primary:hover{background:#4a6b54;border-color:#4a6b54;color:#fff}
+.btn-sm{padding:4px 8px;font-size:11px}
+.btn-approve{background:#2f6b3a;border-color:#2f6b3a;color:#fff}
+.btn-approve:hover{background:#3d8a4a;border-color:#3d8a4a;color:#fff}
+.btn:disabled,.btn[disabled]{opacity:.45;cursor:not-allowed;transform:none}
+.btn:disabled:hover,.btn[disabled]:hover{background:#fff;border-color:#9aa59e;color:var(--ink)}
+.btn-approve:disabled:hover,.btn-approve[disabled]:hover{background:#2f6b3a;border-color:#2f6b3a;color:#fff}
+.attention{display:grid;grid-template-columns:auto 1fr;gap:8px 12px;padding:8px 14px;background:var(--amber-bg);border-bottom:1px solid #efd7a8;font-size:12px;max-height:120px;overflow:auto;position:relative;z-index:30}
+.attention .tag{font-weight:700;text-transform:uppercase;font-size:10px;color:#8a5a0a;padding-top:4px}
+.att-row{display:flex;flex-wrap:wrap;gap:8px;align-items:center;background:rgba(255,255,255,.65);border:1px solid #efd7a8;border-radius:6px;padding:4px 8px;margin:0 0 4px}
+.att-work{text-decoration:underline}
+.att-work .att-project{font-weight:700}
+.menu{position:relative;display:inline-block}
+.menu-list{display:none;position:fixed;z-index:200;min-width:12rem;background:#fff;border:1px solid var(--line);border-radius:6px;box-shadow:0 8px 20px rgba(0,0,0,.12);padding:4px 0}
+.menu.open .menu-list{display:block}
+.menu-list button{display:flex;align-items:center;gap:6px;width:100%;text-align:left;border:0;background:none;padding:6px 10px;font:inherit;font-size:11px;cursor:pointer}
+.doc-mark{flex:0 0 auto;width:1em;font-weight:700;line-height:1}
+.doc-mark-ok{color:var(--green)}
+.doc-mark-bad{color:var(--red)}
+.menu-list button:hover{background:#f0f2ee}
+.batch-more{margin-left:2px;color:var(--muted);font-weight:700;cursor:default;vertical-align:baseline}
+.menu-list .batch-item{display:block;padding:6px 10px;font-size:11px;white-space:nowrap}
+.pill{display:inline-block;padding:1px 7px;border-radius:999px;font-size:10px;font-weight:600;background:var(--chip)}
+.pill-warn{background:#ffe2a8;color:#7a4e00}.pill-ok{background:var(--green-bg);color:var(--green)}
+.body{flex:1;min-height:0;display:grid;grid-template-columns:minmax(0,1fr) 8px minmax(220px,var(--rail));overflow:hidden}
+.splitter{background:var(--line);width:8px;min-width:8px;cursor:col-resize}
+.board{padding:12px;overflow:auto;min-width:0;background:linear-gradient(180deg,#e8ebe4 0%,var(--bg) 48px);display:flex;flex-direction:column;min-height:0;gap:10px}
+.project-band{flex:0 0 auto;min-height:140px;border-bottom:2px solid #b8bfb6;padding-bottom:10px;display:flex;flex-direction:column;min-width:min-content}
+.project-band:last-child{border-bottom:0}
+.project-header{display:flex;align-items:center;gap:8px;margin-bottom:8px;flex:0 0 auto}
+.project-header .project-name{margin:0;padding:0;font:inherit;font-size:13px;font-weight:700;flex:1;text-align:left;border:0;background:none;cursor:pointer;color:inherit}
+.project-header .project-name:hover{text-decoration:underline}
+.work-band{border-bottom:2px solid #b8bfb6;padding-bottom:8px;margin-bottom:8px}
+.work-band:last-child{border-bottom:0;margin-bottom:0}
+.work-band h3{margin:0 0 6px;font-size:11px}
+.inferred{font-size:11px;color:var(--muted);margin:-6px 0 8px}
+.pack-radios{display:flex;flex-wrap:wrap;gap:10px;margin-bottom:10px;font-size:12px}
+#np-conf{min-height:120px;font:12px/1.4 ui-monospace,Menlo,monospace}
+.columns{display:flex;gap:12px;align-items:stretch;min-width:min-content;flex:1;min-height:0}
+.col{flex:0 0 auto;display:flex;flex-direction:column;align-items:flex-start;min-height:0;max-height:100%}
+.col h3{margin:0 0 8px;font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}
+.col-body{display:flex;flex-direction:column;align-items:flex-start;gap:8px;flex:1;min-height:100px;overflow:auto;padding:8px;background:rgba(255,255,255,.35);border:1px dashed #c5cbc2;border-radius:10px;width:max-content;min-width:var(--card-min-w)}
+.batch{display:flex;flex-direction:column;gap:0;width:max-content;min-width:var(--card-min-w)}
+.card{background:var(--card);border:1px solid #d0cbb8;border-radius:8px;padding:7px 8px;font-size:11px;width:max-content;max-width:var(--card-max-w);min-width:var(--card-min-w);min-height:var(--card-min-h);cursor:pointer;display:flex;flex-direction:column;gap:3px}
+.card-merging{background:#fff7c2;border-color:#e6d36a}
+.card:hover{border-color:#a89f7e}
+.card-merging:hover{border-color:#c9b24a}
+.card .title{font-weight:700;font-size:12px;display:flex;align-items:flex-start;gap:6px;width:100%;min-width:0}
+.card .title .name{overflow:hidden;text-overflow:ellipsis;max-width:11rem;display:block;flex:1;min-width:0}
+.audit-count{display:inline-flex;align-items:center;gap:2px;flex:0 0 auto;color:var(--muted);font-size:10px;font-weight:600;font-variant-numeric:tabular-nums;line-height:1.2}
+.audit-icon{font-size:10px}
+.card .status{color:var(--muted);font-size:10px;white-space:normal;overflow:hidden;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical}
+.card-rejected .status{color:var(--red);font-weight:700;-webkit-line-clamp:1}
+.card-del{margin-left:auto;padding:1px 6px;font-size:10px;line-height:1.2}
+.card .foot{display:flex;justify-content:flex-end;gap:8px;color:var(--muted);font-size:10px;margin-top:auto}
+.card-thin{min-height:0;padding:4px 8px;gap:0}
+.timer{font-variant-numeric:tabular-nums}
+.rail{background:var(--panel);display:flex;flex-direction:column;min-height:0;overflow:hidden;font-size:12px;scrollbar-gutter:stable}
+.rail section{padding:10px 12px;border-bottom:1px solid var(--line-soft);display:flex;flex-direction:column;min-height:0}
+.rail-splitter{height:8px;min-height:8px;flex:0 0 auto;background:var(--line);cursor:row-resize}
+.rail section.work-sec{flex:0 0 var(--work,36%);min-height:100px}
+.rail section.ts{flex:1 1 auto;min-height:200px;background:#f7f8f5;border-bottom:0}
+.rail h2{margin:0 0 8px;font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}
+.work-wrap{flex:1;min-height:0;overflow:auto;border:1px solid var(--line-soft);border-radius:6px;background:#fff}
+.work{width:100%;table-layout:fixed;border-collapse:collapse;font-size:11px}
+.work th,.work td{padding:5px 4px;border-bottom:1px solid var(--line-soft);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.work th{text-align:left;color:var(--muted);font-weight:600;font-size:10px;background:#f3f4f0}
+.work col.c-story{width:42%}.work col.c-role{width:5.5rem}.work col.c-state{width:2.25rem}.work col.c-age{width:2.75rem}
+.work td:nth-child(4),.work th:nth-child(4){text-align:right}
+.linkish{color:var(--accent);text-decoration:underline;background:none;border:0;font:inherit;padding:0;cursor:pointer;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:block;text-align:left}
+.st-ico{display:inline-block;width:10px;height:10px;vertical-align:middle;border-radius:50%;background:#c5cbc2}
+.st-ico.dot-green{background:var(--green)}
+.st-ico.dot-yellow{background:#d4a017}
+.wif-therm{display:inline-flex;align-items:center;gap:1px;margin-left:4px;vertical-align:middle}
+.wif-therm .bar{width:2px;height:8px;border-radius:1px;background:#c5cbc2}
+.wif-therm[data-heat="1"] .bar:nth-child(-n+1),
+.wif-therm[data-heat="2"] .bar:nth-child(-n+2),
+.wif-therm[data-heat="3"] .bar:nth-child(-n+3),
+.wif-therm[data-heat="4"] .bar:nth-child(-n+4),
+.wif-therm[data-heat="5"] .bar:nth-child(-n+5),
+.wif-therm[data-heat="6"] .bar:nth-child(-n+6){background:var(--green)}
+.ts-head{display:flex;align-items:center;gap:8px;margin-bottom:6px}.ts-head h2{margin:0;flex:1}
+.history{flex:1;min-height:0;background:#fff;border:1px solid var(--line);border-radius:8px;padding:8px;overflow:auto;display:flex;flex-direction:column;gap:8px;font-size:11px}
+.att-row input[type=text]{flex:1;min-width:8rem;border:1px solid #c6cbc5;border-radius:6px;padding:4px 6px;font:inherit;font-size:11px}
+.bubble-you{border-left:3px solid #6b7c72;padding-left:8px;white-space:pre-wrap}
+.bubble-ts{color:#4a4f4c;padding-left:12px;font-style:italic;white-space:pre-wrap}
+.bubble-status{color:var(--green);padding-left:12px;white-space:pre-wrap}
+.composer{display:flex;gap:6px;margin-top:8px;align-items:flex-end}
+.composer textarea{flex:1;height:calc(1.35em * 4 + 16px);line-height:1.35;border:1px solid #c6cbc5;border-radius:6px;padding:6px 8px;font:inherit;font-size:12px;resize:none}
+.float-layer{position:fixed;inset:0;background:rgba(30,34,31,.28);z-index:100;display:none;align-items:center;justify-content:center}
+.float-layer.open{display:flex}
+.float{background:#f8f8f5;border:1px solid #8a9188;border-radius:10px;box-shadow:0 12px 40px rgba(0,0,0,.2);min-width:min(520px,92vw);width:min(520px,92vw);overflow:hidden}
+.float .titlebar{display:flex;align-items:center;gap:8px;padding:7px 10px;background:linear-gradient(180deg,#eceee8,#e0e3dc);font-weight:600;font-size:12px}
+.float .body-pad{padding:12px;background:#fffef9}
+.float label{display:block;font-size:10px;text-transform:uppercase;color:var(--muted);margin:0 0 4px;font-weight:700}
+.float input[type=text],.float textarea{width:100%;border:1px solid #c6cbc5;border-radius:6px;padding:8px;font:inherit;margin-bottom:10px}
+.float textarea{min-height:140px;resize:vertical}
+.float .actions{display:flex;gap:8px;justify-content:flex-end}
+.note{font-size:11px;color:var(--muted);margin:-4px 0 10px}
+@media (max-width:700px){
+  header.top{align-items:flex-start;flex-direction:column}
+  header.top .spacer{display:none}
+  .body{display:flex;flex-direction:column;overflow:auto}
+  .splitter,.rail-splitter{display:none}
+  .board{flex:0 0 390px;min-height:390px}
+  .rail{flex:0 0 580px;min-height:580px;border-top:1px solid var(--line)}
+  .rail section.work-sec{flex:0 0 220px}
+  .rail section.ts{flex:1 1 auto}
+}
+</style>
+</head>
+<body>
+<div class="cockpit">
+  <header class="top">
+    <div class="pack-identity">
+      <h1 id="pack-title">SwarmForge</h1>
+      <button class="btn btn-danger btn-sm" type="button" id="teardown-btn">Teardown</button>
+      <span class="meta" id="pack-meta"><span class="dot">●</span> live</span>
+    </div>
+    <span class="spacer"></span>
+    <div class="pack-actions">
+      <button class="btn btn-primary" type="button" id="btn-new-project">New Project</button>
+      <div class="menu" id="open-project-menu">
+        <button class="btn" type="button" id="btn-open-project">Open Project</button>
+        <div class="menu-list" id="open-project-list"></div>
+      </div>
+      <button class="btn btn-primary" type="button" id="btn-new-task">New Task</button>
+    </div>
+  </header>
+  <p id="error" class="error"></p>
+
+  <div class="attention" id="attention">
+    <div class="tag">Attention</div>
+    <div id="attention-rows">
+      <div id="attention-approvals"></div>
+      <div id="attention-clarifications"></div>
+    </div>
+  </div>
+
+  <div class="body">
+    <main class="board">
+      <div class="columns" id="columns"></div>
+    </main>
+    <div class="splitter" title="Drag to resize"></div>
+    <aside class="rail">
+      <section class="work-sec">
+        <h2>Work Queue</h2>
+        <div class="work-wrap">
+          <table class="work">
+            <colgroup>
+              <col class="c-story"><col class="c-role"><col class="c-state"><col class="c-age">
+            </colgroup>
+            <thead><tr><th>Task</th><th>Role</th><th></th><th>Age</th></tr></thead>
+            <tbody id="work-rows"></tbody>
+          </table>
+        </div>
+      </section>
+      <div class="rail-splitter" title="Drag to resize"></div>
+      <section class="ts">
+        <div class="ts-head">
+          <h2 id="master-title">Master</h2>
+          <button class="btn btn-sm" type="button" id="btn-open-master-rail">Open</button>
+        </div>
+        <div class="history" id="chat-history"></div>
+        <div class="composer">
+          <textarea id="chat-input" rows="4" placeholder="Follow-up… (Enter send · Shift+Enter newline)"></textarea>
+        </div>
+      </section>
+    </aside>
+  </div>
+</div>
+
+<div class="float-layer" id="reject-layer">
+  <div class="float" role="dialog" aria-labelledby="rt-title">
+    <div class="titlebar" id="rt-title">Rejected task</div>
+    <div class="body-pad">
+      <label for="rt-text">Comments</label>
+      <textarea id="rt-text" placeholder="Audit comments for retry…"></textarea>
+      <div class="actions">
+        <button type="button" class="btn btn-danger" id="rt-delete">Delete</button>
+        <button type="button" class="btn btn-primary" id="rt-retry">Retry</button>
+        <button type="button" class="btn btn-approve" id="rt-accept">Accept Unchanged</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="float-layer" id="new-project-layer">
+  <div class="float" role="dialog" aria-labelledby="np-title" style="width:min(720px,94vw);min-width:min(560px,94vw)">
+    <div class="titlebar" id="np-title">New Project</div>
+    <div class="body-pad">
+      <label for="np-name">Name</label>
+      <input id="np-name" type="text" placeholder="my-app or owner/repo">
+      <p class="inferred" id="np-inferred"></p>
+      <label class="toggle"><input type="checkbox" id="np-github"> github repo</label>
+      <label for="np-mission">Mission</label>
+      <textarea id="np-mission" placeholder="What this project is for…"></textarea>
+      <label>Pack</label>
+      <div class="pack-radios" id="np-packs"></div>
+      <label for="np-conf">Config</label>
+      <textarea id="np-conf"></textarea>
+      <div class="actions">
+        <button type="button" class="btn" id="np-cancel">Cancel</button>
+        <button type="button" class="btn btn-primary" id="np-ok">OK</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="float-layer" id="new-task-layer">
+  <div class="float" role="dialog" aria-labelledby="nt-title">
+    <div class="titlebar" id="nt-title">New Task</div>
+    <div class="body-pad">
+      <p class="note">Creates a card in the master lane and sends name + text to the master agent.</p>
+      <label for="nt-name">Name</label>
+      <input id="nt-name" type="text" placeholder="task-name">
+      <label for="nt-text">Task</label>
+      <textarea id="nt-text" placeholder="What the master agent should do…"></textarea>
+      <div class="actions">
+        <button type="button" class="btn" id="nt-cancel">Cancel</button>
+        <button type="button" class="btn btn-primary" id="nt-ok">OK</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+
+function displayName(role) {
+  if (!role) return "";
+  return role.charAt(0).toUpperCase() + role.slice(1);
+}
+
+function cardEl(task, opts) {
+  const thin = opts && opts.thin;
+  const card = document.createElement("article");
+  card.className = thin ? "card card-thin" : "card";
+  if (task.status === "REJECTED") card.classList.add("card-rejected");
+  if (task.merging) card.classList.add("card-merging");
+  card.setAttribute("data-task-name", task.name || "");
+  if (task.merging) card.setAttribute("data-merging", "true");
+  const title = document.createElement("div");
+  title.className = "title";
+  const name = document.createElement("span");
+  name.className = "name";
+  name.textContent = task.name;
+  title.appendChild(name);
+  const audit = document.createElement("span");
+  audit.className = "audit-count";
+  audit.title = "Audit count: " + (task.audit_count || 0);
+  const auditIcon = document.createElement("span");
+  auditIcon.className = "audit-icon";
+  auditIcon.setAttribute("role", "img");
+  auditIcon.setAttribute("aria-label", "Audit count");
+  auditIcon.title = "Audit count";
+  auditIcon.textContent = "\u2713";
+  const auditValue = document.createElement("span");
+  auditValue.textContent = String(task.audit_count || 0);
+  audit.append(auditIcon, auditValue);
+  title.appendChild(audit);
+  card.appendChild(title);
+  if (!thin && task.status) {
+    const status = document.createElement("div");
+    status.className = "status";
+    status.textContent = task.status;
+    card.appendChild(status);
+  }
+  card.onclick = () => {
+    const qs = "name=" + encodeURIComponent(task.name || "")
+      + (task.project ? "&project=" + encodeURIComponent(task.project) : "");
+    openGrowable("/task?" + qs, "task-" + (task.name || ""));
+  };
+  return card;
+}
+
+function columnEl(lane, tasks, project) {
+  const col = document.createElement("div");
+  col.className = "col";
+  col.dataset.lane = lane;
+  const heading = document.createElement("h3");
+  heading.textContent = displayName(lane);
+  const body = document.createElement("div");
+  body.className = "col-body";
+  body.id = "lane-" + (project ? project + "-" : "") + lane;
+  const mine = tasks.filter((task) => task.lane === lane);
+  let i = 0;
+  while (i < mine.length) {
+    const id = mine[i].batch;
+    if (id) {
+      const group = [];
+      while (i < mine.length && mine[i].batch === id) group.push(mine[i++]);
+      if (group.length > 1) {
+        const wrap = document.createElement("div");
+        wrap.className = "batch";
+        group.forEach((task, idx) => wrap.appendChild(cardEl(task, {thin: idx > 0})));
+        body.appendChild(wrap);
+      } else {
+        body.appendChild(cardEl(group[0]));
+      }
+    } else {
+      body.appendChild(cardEl(mine[i++]));
+    }
+  }
+  col.append(heading, body);
+  return col;
+}
+
+function projectBand(proj) {
+  const band = document.createElement("div");
+  band.className = "project-band";
+  band.dataset.project = proj.name || "";
+  const header = document.createElement("div");
+  header.className = "project-header";
+  const title = document.createElement("button");
+  title.type = "button";
+  title.className = "project-name";
+  title.textContent = proj.name || "";
+  title.onclick = () => openMission(proj.name);
+  const nt = document.createElement("button");
+  nt.type = "button";
+  nt.className = "btn btn-primary btn-sm";
+  nt.textContent = "New Task";
+  nt.onclick = () => openNewTask(proj.name);
+  const cl = document.createElement("button");
+  cl.type = "button";
+  cl.className = "btn btn-sm";
+  cl.textContent = "Close";
+  cl.onclick = () => closeProject(proj.name);
+  header.append(title, nt, cl);
+  const cols = document.createElement("div");
+  cols.className = "columns";
+  const lanes = (proj.lanes || []).concat(["done"]);
+  lanes.forEach((lane) => cols.appendChild(columnEl(lane, proj.tasks || [], proj.name)));
+  band.append(header, cols);
+  return band;
+}
+
+function renderBoard(data) {
+  const board = document.querySelector(".board");
+  if (data.forge) {
+    board.replaceChildren();
+    (data.projects || []).forEach((proj) => board.appendChild(projectBand(proj)));
+    return;
+  }
+  let columns = $("columns");
+  if (!columns) {
+    columns = document.createElement("div");
+    columns.id = "columns";
+    columns.className = "columns";
+    board.replaceChildren(columns);
+  }
+  columns.replaceChildren();
+  const lanes = (data.lanes || []).concat(["done"]);
+  const tasks = data.tasks || [];
+  lanes.forEach((lane) => columns.appendChild(columnEl(lane, tasks)));
+}
+
+let forgePacks = [];
+let allProjects = [];
+let openProjects = [];
+let taskProject = "";
+
+function fillOpenMenu() {
+  const list = $("open-project-list");
+  if (!list) return;
+  list.replaceChildren();
+  allProjects.forEach((name) => {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.textContent = name + (openProjects.indexOf(name) >= 0 ? " (open)" : "");
+    btn.onclick = (event) => {
+      event.stopPropagation();
+      $("open-project-menu").classList.remove("open");
+      openProject(name);
+    };
+    list.appendChild(btn);
+  });
+  if (!allProjects.length) {
+    const empty = document.createElement("div");
+    empty.className = "batch-item";
+    empty.textContent = "No projects";
+    list.appendChild(empty);
+  }
+}
+
+function renderChrome(data) {
+  const master = data.master_display || displayName(data.master_role);
+  const masterRole = data.master_role || "";
+  const forge = !!data.forge;
+  $("pack-title").textContent = forge ? "SwarmForge" : "SwarmForge Pack";
+  $("btn-new-task").style.display = forge ? "none" : "";
+  $("btn-new-project").style.display = forge ? "" : "none";
+  $("open-project-menu").style.display = forge ? "" : "none";
+  if (forge) {
+    forgePacks = data.packs || [];
+    allProjects = data.all_projects || [];
+    openProjects = data.open_projects || [];
+    fillOpenMenu();
+  }
+  $("pack-meta").replaceChildren();
+  const dot = document.createElement("span");
+  dot.className = "dot";
+  dot.textContent = "●";
+  $("pack-meta").append(dot, " live · master = " + master);
+  $("btn-open-master-rail").textContent = "Open " + master;
+  $("btn-open-master-rail").setAttribute("data-open-agent", masterRole);
+  $("master-title").textContent = master;
+}
+
+function age(iso) {
+  const then = Date.parse(iso || "");
+  if (Number.isNaN(then)) return "";
+  const mins = Math.max(0, Math.round((Date.now() - then) / 60000));
+  if (mins < 60) return mins + "m";
+  const hours = Math.round(mins / 60);
+  if (hours < 48) return hours + "h";
+  return Math.round(hours / 24) + "d";
+}
+
+function openGrowable(url, name) {
+  const sep = url.indexOf("?") >= 0 ? "&" : "?";
+  window.open(url + sep + "_open=" + Date.now(), name, "resizable=yes,scrollbars=yes,width=780,height=560");
+}
+
+function openAgentWindow(url, name) {
+  openGrowable(url, name);
+}
+
+function stateIcon(state) {
+  const ico = document.createElement("span");
+  if (state === "live") {
+    ico.className = "st-ico dot-green";
+    ico.title = "live";
+  } else if (state === "idle") {
+    ico.className = "st-ico dot-yellow";
+    ico.title = "idle";
+  } else {
+    ico.className = "st-ico";
+    ico.title = "no session";
+  }
+  return ico;
+}
+
+function workRow(item) {
+  const tr = document.createElement("tr");
+  tr.dataset.workRole = item.role || "";
+  const task = document.createElement("td");
+  const names = item.tasks && item.tasks.length ? item.tasks : (item.task ? [item.task] : []);
+  const batchNames = item.batch_tasks && item.batch_tasks.length ? item.batch_tasks : [];
+  task.dataset.tasks = names.join("\n");
+  task.dataset.batchTasks = batchNames.join("\n");
+  task.append(names[0] || "");
+  if (batchNames.length > 1) {
+    const more = document.createElement("span");
+    more.className = "menu batch-more";
+    const mark = document.createElement("span");
+    mark.textContent = "+";
+    const list = document.createElement("div");
+    list.className = "menu-list";
+    batchNames.forEach((name) => {
+      const row = document.createElement("div");
+      row.className = "batch-item";
+      row.textContent = name;
+      list.appendChild(row);
+    });
+    const place = () => {
+      const box = mark.getBoundingClientRect();
+      list.style.top = box.bottom + "px";
+      list.style.left = box.left + "px";
+    };
+    more.addEventListener("mouseenter", () => {
+      more.classList.add("open");
+      place();
+    });
+    more.addEventListener("mouseleave", () => more.classList.remove("open"));
+    more.append(mark, list);
+    task.append(" ", more);
+  }
+  const role = document.createElement("td");
+  const link = document.createElement("button");
+  link.type = "button";
+  link.className = "linkish";
+  link.setAttribute("data-open-agent", item.role || "");
+  if (item.project) link.setAttribute("data-open-project", item.project);
+  link.title = "open " + (item.role || "") + " session";
+  link.textContent = item.role || "";
+  const therm = document.createElement("span");
+  const heat = Number(item.activity) || 0;
+  therm.className = "wif-therm";
+  therm.dataset.heat = String(heat);
+  for (let i = 0; i < 6; i++) {
+    const bar = document.createElement("span");
+    bar.className = "bar";
+    therm.appendChild(bar);
+  }
+  role.append(link, therm);
+  const state = document.createElement("td");
+  state.appendChild(stateIcon(item.state));
+  const ageCell = document.createElement("td");
+  ageCell.textContent = age(item.updated_at);
+  tr.append(task, role, state, ageCell);
+  return tr;
+}
+
+function renderWork(data) {
+  if (data.forge) {
+    const wrap = document.querySelector(".work-wrap");
+    wrap.replaceChildren();
+    (data.projects || []).forEach((proj) => {
+      const band = document.createElement("div");
+      band.className = "work-band";
+      const h = document.createElement("h3");
+      h.textContent = proj.name || "";
+      const table = document.createElement("table");
+      table.className = "work";
+      table.innerHTML = "<thead><tr><th>Task</th><th>Role</th><th></th><th>Age</th></tr></thead>";
+      const tbody = document.createElement("tbody");
+      (proj.work_in_flight || []).forEach((item) => tbody.appendChild(workRow(item)));
+      table.appendChild(tbody);
+      band.append(h, table);
+      wrap.appendChild(band);
+    });
+    return;
+  }
+  const rows = $("work-rows");
+  const items = data.work_in_flight || [];
+  const live = {};
+  items.forEach((item) => {
+    live[item.role] = true;
+  });
+  [...rows.querySelectorAll("[data-work-role]")].forEach((tr) => {
+    if (!live[tr.dataset.workRole]) tr.remove();
+  });
+  items.forEach((item, i) => {
+    let tr = rows.querySelector("[data-work-role=\"" + item.role + "\"]");
+    if (!tr) {
+      tr = workRow(item);
+      const before = rows.children[i];
+      if (before) rows.insertBefore(tr, before);
+      else rows.appendChild(tr);
+      return;
+    }
+    const names = item.tasks && item.tasks.length ? item.tasks : (item.task ? [item.task] : []);
+    const batchNames = item.batch_tasks && item.batch_tasks.length ? item.batch_tasks : [];
+    const key = names.join("\n");
+    const batchKey = batchNames.join("\n");
+    if (tr.children[0].dataset.tasks !== key || tr.children[0].dataset.batchTasks !== batchKey) {
+      tr.replaceWith(workRow(item));
+      return;
+    }
+    tr.querySelector(".wif-therm").dataset.heat = String(Number(item.activity) || 0);
+    tr.children[2].replaceChildren(stateIcon(item.state));
+    tr.children[3].textContent = age(item.updated_at);
+  });
+}
+
+function fileName(path) {
+  const parts = (path || "").split("/");
+  return parts[parts.length - 1] || path;
+}
+
+async function postApproval(id, action) {
+  await fetch("/api/approvals/" + encodeURIComponent(id) + "/" + action, {method: "POST"});
+  loadState();
+}
+
+function escapeHtml(value) {
+  return String(value)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+function renderDiffLines(lines) {
+  return (lines || []).map((line) => {
+    const kind = line.type || "same";
+    const cls = kind === "add" ? "diff-add" : kind === "del" ? "diff-del" : "diff-same";
+    return "<span class=\"" + cls + "\">" + escapeHtml(line.text || "") + "\n</span>";
+  }).join("");
+}
+
+function renderHistory(history) {
+  if (!history || !history.length) {
+    return "<div class=\"hist-empty\">No previous comments</div>";
+  }
+  return history.map((item) => {
+    const at = escapeHtml(item.at || "");
+    const text = escapeHtml(item.text || "");
+    return "<div class=\"hist-sep\">" + at + "</div><div class=\"hist-block\">" + text + "</div>";
+  }).join("");
+}
+
+function bindVSplit(win, handle, top, bottom) {
+  if (!handle || !top || !bottom) return;
+  handle.addEventListener("pointerdown", (event) => {
+    event.preventDefault();
+    const startY = event.clientY;
+    const topH = top.getBoundingClientRect().height;
+    const botH = bottom.getBoundingClientRect().height;
+    const move = (e) => {
+      const dy = e.clientY - startY;
+      top.style.flex = "0 0 " + Math.max(40, topH + dy) + "px";
+      bottom.style.flex = "0 0 " + Math.max(40, botH - dy) + "px";
+      top.classList.remove("empty");
+      bottom.classList.remove("empty");
+      top.style.minHeight = "40px";
+      bottom.style.minHeight = "40px";
+      top.style.maxHeight = "none";
+      bottom.style.maxHeight = "none";
+    };
+    const up = () => {
+      win.removeEventListener("pointermove", move);
+      win.removeEventListener("pointerup", up);
+    };
+    win.addEventListener("pointermove", move);
+    win.addEventListener("pointerup", up);
+  });
+}
+
+function fillDocWindow(win, name, data) {
+  const hasDiff = !!(data && data.has_diff);
+  const text = (data && data.text) || "";
+  const history = (data && data.history) || [];
+  const emptyHist = !history.length;
+  win.document.open();
+  win.document.write(
+    "<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\"><title>" +
+    escapeHtml(name) + "</title>" +
+    "<style>html,body{height:100%;margin:0;display:flex;flex-direction:column;background:#f8f8f5;color:#1e221f;font-family:ui-sans-serif,system-ui,sans-serif}" +
+    "header{display:flex;align-items:center;gap:8px;padding:8px 10px;background:linear-gradient(180deg,#eceee8,#e0e3dc);border-bottom:1px solid #d5d9d2;flex:0 0 auto}" +
+    "h1{margin:0;font-size:14px;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}" +
+    "label.toggle{display:flex;align-items:center;gap:6px;font-size:11px;font-weight:600;color:#68726c;white-space:nowrap}" +
+    "pre{flex:1 1 auto;min-height:4rem;margin:0;padding:12px;overflow:auto;white-space:pre-wrap;font:12px/1.4 ui-monospace,Menlo,monospace}" +
+    ".diff-add{color:#1a7f37;background:#e6ffed}.diff-del{color:#9b1c1c;background:#ffebe9}.diff-same{color:#1e221f}" +
+    ".doc-split{flex:0 0 6px;cursor:row-resize;background:#d5d9d2}" +
+    ".doc-split:hover{background:#b8bfb6}" +
+    "#doc-history{flex:0 0 28%;min-height:5rem;overflow:auto;padding:8px 12px;background:#f3f4f0;font:12px/1.4 ui-sans-serif,system-ui,sans-serif}" +
+    "#doc-history.empty{flex:0 0 2.5rem;min-height:2.5rem;max-height:2.5rem}" +
+    ".hist-sep{margin:8px 0 4px;padding-top:6px;border-top:1px solid #c6cbc5;color:#68726c;font-size:10px;text-transform:uppercase;letter-spacing:.04em;font-weight:700}" +
+    ".hist-sep:first-child{margin-top:0;padding-top:0;border-top:0}" +
+    ".hist-block{white-space:pre-wrap;overflow-wrap:anywhere}" +
+    ".hist-empty{color:#68726c;font-style:italic}" +
+    ".comments{flex:0 0 auto;display:flex;flex-direction:column;gap:6px;padding:10px 12px;border-top:1px solid #d5d9d2;background:#fffef9}" +
+    "label{font-size:10px;text-transform:uppercase;font-weight:700;color:#68726c}" +
+    "textarea{width:100%;min-height:7rem;max-height:40vh;overflow:auto;resize:vertical;white-space:pre-wrap;overflow-wrap:anywhere;word-wrap:break-word;border:1px solid #c6cbc5;border-radius:6px;padding:8px;font:12px/1.4 ui-sans-serif,system-ui,sans-serif}" +
+    ".actions{display:flex;gap:8px;justify-content:flex-end}" +
+    "button{border:1px solid #9aa59e;background:#fff;padding:5px 10px;border-radius:7px;font-size:12px;cursor:pointer}" +
+    "#doc-save{background:#3d5a45;border-color:#3d5a45;color:#fff}</style></head><body>" +
+    "<header><h1>" + escapeHtml(name) + "</h1>" +
+    "<label class=\"toggle\"><input type=\"checkbox\" id=\"doc-diff\"" +
+    (hasDiff ? "" : " disabled") + "> Diff</label></header>" +
+    "<pre id=\"doc-body\">" + escapeHtml(text) + "</pre>" +
+    "<div class=\"doc-split\" id=\"doc-split-body\" title=\"Drag to resize\"></div>" +
+    "<div id=\"doc-history\"" + (emptyHist ? " class=\"empty\"" : "") + ">" +
+    renderHistory(history) + "</div>" +
+    "<div class=\"doc-split\" id=\"doc-split-hist\" title=\"Drag to resize\"></div>" +
+    "<div class=\"comments\" id=\"doc-comments-pane\"><label for=\"doc-comments\">New comment</label>" +
+    "<textarea id=\"doc-comments\"></textarea>" +
+    "<div class=\"actions\">" +
+    "<button type=\"button\" id=\"doc-cancel\">Cancel</button>" +
+    "<button type=\"button\" id=\"doc-save\">Save</button></div></div>" +
+    "</body></html>"
+  );
+  win.document.close();
+  const box = win.document.getElementById("doc-diff");
+  const body = win.document.getElementById("doc-body");
+  const hist = win.document.getElementById("doc-history");
+  const comments = win.document.getElementById("doc-comments-pane");
+  bindVSplit(win, win.document.getElementById("doc-split-body"), body, hist);
+  bindVSplit(win, win.document.getElementById("doc-split-hist"), hist, comments);
+  if (box && body && hasDiff) {
+    box.onchange = () => {
+      body.innerHTML = box.checked ? renderDiffLines(data.lines) : escapeHtml(text);
+    };
+  }
+}
+
+function hasRemedialComments(item) {
+  const reviews = (item && item.reviews) || {};
+  return Object.keys(reviews).some((path) => String(reviews[path] || "").trim());
+}
+
+function docMark(path, reviews) {
+  const mark = document.createElement("span");
+  mark.className = "doc-mark";
+  if (!reviews || !Object.prototype.hasOwnProperty.call(reviews, path)) {
+    mark.textContent = "\u2610";
+    mark.title = "Not read";
+  } else if (!String(reviews[path] || "").trim()) {
+    mark.className += " doc-mark-ok";
+    mark.textContent = "\u2713";
+    mark.title = "No comments";
+  } else {
+    mark.className += " doc-mark-bad";
+    mark.textContent = "\u2717";
+    mark.title = "Has comments";
+  }
+  return mark;
+}
+
+async function viewDoc(path, approvalId, project) {
+  const qs = "/api/doc?path=" + encodeURIComponent(path) +
+    (approvalId ? "&id=" + encodeURIComponent(approvalId) : "") +
+    (project ? "&project=" + encodeURIComponent(project) : "");
+  const res = await fetch(qs);
+  const data = res.ok ? await res.json() : {text: "Not found", history: [], has_diff: false, lines: []};
+  const name = fileName(path);
+  const win = window.open("about:blank", "doc-" + encodeURIComponent(path) + "-" + Date.now(), "resizable=yes,scrollbars=yes,width=780,height=640");
+  if (!win) return;
+  fillDocWindow(win, name, data);
+  win.document.getElementById("doc-cancel").onclick = () => win.close();
+  win.document.getElementById("doc-save").onclick = async () => {
+    if (approvalId) {
+      await fetch("/api/approvals/" + encodeURIComponent(approvalId) + "/comments", {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({path, comments: win.document.getElementById("doc-comments").value})
+      });
+    }
+    win.close();
+    loadState();
+  };
+}
+
+const openDocMenus = new Set();
+const clarDrafts = {};
+
+function artifactMenu(paths, item) {
+  const id = item && item.id ? item.id : "";
+  const reviews = (item && item.reviews) || {};
+  const wrap = document.createElement("div");
+  wrap.className = "menu";
+  wrap.dataset.docId = id || "";
+  const btn = document.createElement("button");
+  btn.type = "button";
+  btn.className = "btn btn-sm";
+  btn.textContent = "Documents";
+  const list = document.createElement("div");
+  list.className = "menu-list";
+  (paths || []).forEach((path) => {
+    const choice = document.createElement("button");
+    choice.type = "button";
+    const name = document.createElement("span");
+    name.textContent = fileName(path);
+    choice.append(docMark(path, reviews), name);
+    choice.onclick = (event) => {
+      event.stopPropagation();
+      wrap.classList.remove("open");
+      if (id) openDocMenus.delete(id);
+      viewDoc(path, id, item.project);
+    };
+    list.appendChild(choice);
+  });
+  const place = () => {
+    const box = btn.getBoundingClientRect();
+    list.style.top = box.bottom + "px";
+    list.style.left = box.left + "px";
+  };
+  btn.onclick = (event) => {
+    event.stopPropagation();
+    wrap.classList.toggle("open");
+    if (wrap.classList.contains("open")) {
+      if (id) openDocMenus.add(id);
+      place();
+    } else if (id) {
+      openDocMenus.delete(id);
+    }
+  };
+  wrap.append(btn, list);
+  if (id && openDocMenus.has(id)) {
+    wrap.classList.add("open");
+    requestAnimationFrame(place);
+  }
+  return wrap;
+}
+
+function approvalButton(item, action, label, className) {
+  const btn = document.createElement("button");
+  btn.type = "button";
+  btn.className = className;
+  btn.textContent = label;
+  btn.onclick = () => postApproval(item.id, action);
+  return btn;
+}
+
+function attentionWorkPair(project, task) {
+  const wrap = document.createElement("span");
+  wrap.className = "att-work";
+  if (project) {
+    const name = document.createElement("span");
+    name.className = "att-project";
+    name.textContent = project;
+    wrap.appendChild(name);
+  }
+  if (project && task) wrap.appendChild(document.createTextNode("/"));
+  if (task) wrap.appendChild(document.createTextNode(task));
+  return wrap;
+}
+
+function playChime() {
+  window.__swarmChime = (window.__swarmChime || 0) + 1;
+  try {
+    const Ctx = window.AudioContext || window.webkitAudioContext;
+    if (!Ctx) return;
+    const ctx = new Ctx();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = "sine";
+    osc.frequency.value = 880;
+    gain.gain.setValueAtTime(0.08, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.18);
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.start();
+    osc.stop(ctx.currentTime + 0.2);
+  } catch (_) {}
+}
+
+let attentionSeen = new Set();
+let attentionPrimed = false;
+function chimeNewAttention(data) {
+  const keys = [];
+  (data.approvals || []).forEach((item) => {
+    if (item && item.id) keys.push("a:" + item.id);
+  });
+  (data.clarifications || []).forEach((item) => {
+    if (item && item.id && item.status === "pending") keys.push("c:" + item.id);
+  });
+  let fresh = false;
+  if (attentionPrimed) {
+    keys.forEach((key) => {
+      if (!attentionSeen.has(key)) fresh = true;
+    });
+  }
+  attentionSeen = new Set(keys);
+  attentionPrimed = true;
+  if (fresh) playChime();
+}
+
+function attentionRow(item) {
+  const row = document.createElement("div");
+  row.className = "att-row";
+  const pill = document.createElement("span");
+  pill.className = "pill pill-warn";
+  pill.textContent = "Approval";
+  const summary = attentionWorkPair(item.project, item.task);
+  row.append(pill, summary);
+  if ((item.artifacts || []).length) row.appendChild(artifactMenu(item.artifacts, item));
+  const reject = document.createElement("button");
+  reject.type = "button";
+  reject.className = "btn btn-sm";
+  reject.textContent = "Reject";
+  reject.onclick = () => openRejectDialog(item);
+  const approve = approvalButton(item, "approve", "Approve", "btn btn-sm btn-approve");
+  approve.disabled = hasRemedialComments(item);
+  row.append(approve, reject);
+  return row;
+}
+
+function fillClarWindow(win, item) {
+  const request = item.body || "";
+  const draft = clarDrafts[item.id] || "";
+  win.document.open();
+  win.document.write(
+    "<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\"><title>Clarification</title>" +
+    "<style>html,body{height:100%;margin:0;display:flex;flex-direction:column;background:#f8f8f5;color:#1e221f;font-family:ui-sans-serif,system-ui,sans-serif}" +
+    "header{flex:0 0 auto;padding:8px 10px;background:linear-gradient(180deg,#eceee8,#e0e3dc);border-bottom:1px solid #d5d9d2;font-weight:600;font-size:13px}" +
+    "#clar-request{flex:1 1 50%;min-height:4rem;margin:0;padding:12px;overflow:auto;white-space:pre-wrap;background:#fffef9;font:13px/1.45 ui-sans-serif,system-ui,sans-serif}" +
+    ".doc-split{flex:0 0 6px;cursor:row-resize;background:#d5d9d2}" +
+    ".doc-split:hover{background:#b8bfb6}" +
+    "#clar-response-pane{flex:1 1 50%;min-height:4rem;display:flex;flex-direction:column;padding:10px 12px;background:#fff;gap:6px}" +
+    "label{font-size:10px;text-transform:uppercase;font-weight:700;color:#68726c}" +
+    "textarea{flex:1;min-height:4rem;width:100%;border:1px solid #c6cbc5;border-radius:6px;padding:8px;font:13px/1.45 ui-sans-serif,system-ui,sans-serif;resize:none}" +
+    ".actions{display:flex;justify-content:flex-end}" +
+    "button{border:1px solid #9aa59e;background:#3d5a45;border-color:#3d5a45;color:#fff;padding:5px 12px;border-radius:7px;font-size:12px;cursor:pointer}" +
+    "</style></head><body>" +
+    "<header>Clarification requested from: " + escapeHtml(item.role || "agent") + "</header>" +
+    "<pre id=\"clar-request\">" + escapeHtml(request) + "</pre>" +
+    "<div class=\"doc-split\" id=\"clar-split\" title=\"Drag to resize\"></div>" +
+    "<div id=\"clar-response-pane\"><label for=\"clar-response\">Response</label>" +
+    "<textarea id=\"clar-response\">" + escapeHtml(draft) + "</textarea>" +
+    "<div class=\"actions\"><button type=\"button\" id=\"clar-ok\">OK</button></div></div>" +
+    "</body></html>"
+  );
+  win.document.close();
+  bindVSplit(win, win.document.getElementById("clar-split"),
+    win.document.getElementById("clar-request"),
+    win.document.getElementById("clar-response-pane"));
+}
+
+function openClarification(item) {
+  const win = window.open("about:blank", "clar-" + encodeURIComponent(item.id || "") + "-" + Date.now(),
+    "resizable=yes,scrollbars=yes,width=720,height=520");
+  if (!win) return;
+  fillClarWindow(win, item);
+  const box = win.document.getElementById("clar-response");
+  win.document.getElementById("clar-ok").onclick = async () => {
+    const text = box.value;
+    clarDrafts[item.id] = text;
+    await postClarification(item.id, text);
+    win.close();
+  };
+}
+
+function clarificationRow(item) {
+  const row = document.createElement("form");
+  row.className = "att-row";
+  const pill = document.createElement("span");
+  pill.className = "pill pill-warn";
+  pill.textContent = "Clarification requested from: " + (item.role || "agent");
+  const pair = attentionWorkPair(item.project, item.task);
+  const summary = document.createElement("span");
+  summary.textContent = item.body || "";
+  const input = document.createElement("input");
+  input.type = "text";
+  input.placeholder = "Answer…";
+  input.dataset.clarId = item.id || "";
+  input.value = clarDrafts[item.id] || "";
+  input.addEventListener("input", () => {
+    clarDrafts[item.id] = input.value;
+  });
+  const open = document.createElement("button");
+  open.type = "button";
+  open.className = "btn btn-sm";
+  open.textContent = "Open";
+  open.onclick = (event) => {
+    event.preventDefault();
+    openClarification(item);
+  };
+  const send = document.createElement("button");
+  send.type = "submit";
+  send.className = "btn btn-sm btn-primary";
+  send.textContent = "Submit";
+  row.addEventListener("submit", (event) => {
+    event.preventDefault();
+    postClarification(item.id, input.value);
+  });
+  row.append(pill, pair, summary, input, open, send);
+  return row;
+}
+
+async function postClarification(id, text) {
+  if (!text || !text.trim()) return;
+  await fetch("/api/clarifications/" + encodeURIComponent(id) + "/answer", {
+    method: "POST",
+    headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({text})
+  });
+  loadState();
+}
+
+function renderApprovals(items) {
+  const box = $("attention-approvals");
+  box.replaceChildren();
+  (items || []).forEach((item) => box.appendChild(attentionRow(item)));
+}
+
+function renderClarifications(items) {
+  const box = $("attention-clarifications");
+  const pending = (items || []).filter((item) => item.status === "pending");
+  const live = {};
+  pending.forEach((item) => {
+    live[item.id] = true;
+  });
+  [...box.querySelectorAll("[data-clar-id]")].forEach((input) => {
+    if (!live[input.dataset.clarId]) input.closest(".att-row").remove();
+  });
+  pending.forEach((item) => {
+    if (!box.querySelector("[data-clar-id=\"" + item.id + "\"]")) {
+      box.appendChild(clarificationRow(item));
+    }
+  });
+}
+
+function renderAttention(data) {
+  chimeNewAttention(data);
+  renderApprovals(data.approvals);
+  renderClarifications(data.clarifications);
+}
+
+async function loadState() {
+  try {
+    const res = await fetch("/api/state", {cache: "no-store"});
+    if (!res.ok) throw new Error("offline");
+    const data = await res.json();
+    $("error").textContent = "";
+    renderChrome(data);
+    renderBoard(data);
+    renderAttention(data);
+    renderWork(data);
+    renderChat(data);
+  } catch (_) {
+    $("error").textContent = "Swarm disconnected";
+  }
+}
+
+function closeNewTask() {
+  $("new-task-layer").classList.remove("open");
+  taskProject = "";
+}
+
+function openNewTask(project) {
+  taskProject = project || "";
+  $("new-task-layer").classList.add("open");
+  $("nt-name").focus();
+}
+
+function selectedPack() {
+  const box = $("np-packs").querySelector("input[name=np-pack]:checked");
+  return box ? box.value : "";
+}
+
+function updateInferred() {
+  const github = $("np-github").checked;
+  const raw = $("np-name").value.trim();
+  let name = raw;
+  if (github) {
+    name = raw.replace(/\.git$/, "").replace(/^https?:\/\/github.com\//, "");
+    name = name.split("/").filter(Boolean).pop() || name;
+  }
+  $("np-inferred").textContent = github && name ? "Directory: " + name : "";
+}
+
+function fillPackRadios() {
+  const box = $("np-packs");
+  box.replaceChildren();
+  forgePacks.forEach((pack, i) => {
+    const label = document.createElement("label");
+    const radio = document.createElement("input");
+    radio.type = "radio";
+    radio.name = "np-pack";
+    radio.value = pack.name;
+    if (i === 0) radio.checked = true;
+    radio.onchange = () => { $("np-conf").value = pack.conf || ""; };
+    label.append(radio, " " + pack.name);
+    box.appendChild(label);
+  });
+  if (forgePacks[0]) $("np-conf").value = forgePacks[0].conf || "";
+}
+
+async function refreshForgePacks() {
+  try {
+    const res = await fetch("/api/state", {cache: "no-store"});
+    if (!res.ok) return;
+    const data = await res.json();
+    if (data.packs) forgePacks = data.packs;
+    if (data.all_projects) allProjects = data.all_projects;
+    if (data.open_projects) openProjects = data.open_projects;
+  } catch (_) {}
+}
+
+function openNewProject() {
+  refreshForgePacks().then(() => fillPackRadios());
+  fillPackRadios();
+  $("np-name").value = "";
+  $("np-github").checked = false;
+  $("np-mission").value = "";
+  updateInferred();
+  $("np-ok").disabled = false;
+  $("np-ok").textContent = "OK";
+  $("new-project-layer").classList.add("open");
+  $("np-name").focus();
+}
+
+function closeNewProject() {
+  $("new-project-layer").classList.remove("open");
+}
+
+async function submitNewProject() {
+  const name = $("np-name").value.trim();
+  const pack = selectedPack() || (forgePacks[0] && forgePacks[0].name) || "";
+  if (!name) {
+    alert("Name is required.");
+    $("np-name").focus();
+    return;
+  }
+  if (!pack) {
+    alert("No pack is available. Run get-swarm-forge so packs/ has two-pack, four-pack, or six-pack.");
+    return;
+  }
+  const btn = $("np-ok");
+  btn.disabled = true;
+  btn.textContent = "Creating…";
+  try {
+    const res = await fetch("/api/projects", {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({
+        name,
+        github: $("np-github").checked,
+        pack,
+        conf: $("np-conf").value,
+        mission: $("np-mission").value
+      })
+    });
+    if (!res.ok) {
+      let msg = "Could not create project";
+      try { msg = (await res.json()).error || msg; } catch (_) {}
+      alert(msg);
+      return;
+    }
+    closeNewProject();
+    loadState();
+  } catch (err) {
+    alert("Could not create project: " + (err && err.message ? err.message : err));
+  } finally {
+    btn.disabled = false;
+    btn.textContent = "OK";
+  }
+}
+
+async function openProject(name) {
+  const res = await fetch("/api/projects/open", {
+    method: "POST",
+    headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({name})
+  });
+  if (!res.ok) {
+    let msg = "Could not open project";
+    try { msg = (await res.json()).error || msg; } catch (_) {}
+    alert(msg);
+    return;
+  }
+  loadState();
+}
+
+async function closeProject(name) {
+  const res = await fetch("/api/projects/close", {
+    method: "POST",
+    headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({name})
+  });
+  if (!res.ok) {
+    let msg = "Could not close project";
+    try { msg = (await res.json()).error || msg; } catch (_) {}
+    alert(msg);
+    return;
+  }
+  loadState();
+}
+
+async function submitNewTask() {
+  const name = $("nt-name").value.trim();
+  const text = $("nt-text").value;
+  if (!name) return;
+  const payload = {name, text};
+  if (taskProject) payload.project = taskProject;
+  const res = await fetch("/api/tasks", {
+    method: "POST",
+    headers: {"Content-Type": "application/json"},
+    body: JSON.stringify(payload)
+  });
+  if (!res.ok) {
+    let msg = "Could not create task";
+    try {
+      const body = await res.json();
+      msg = body.error || msg;
+    } catch (_) {}
+    alert(msg);
+    $("nt-name").focus();
+    return;
+  }
+  $("nt-name").value = "";
+  $("nt-text").value = "";
+  closeNewTask();
+  loadState();
+}
+
+async function deleteTask(name) {
+  if (!name) return;
+  await fetch("/api/tasks/delete", {
+    method: "POST",
+    headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({name})
+  });
+  loadState();
+}
+
+let rejectApprovalId = "";
+let rejectApprovalProject = "";
+let rejectHasComments = false;
+function closeRejectDialog() {
+  $("reject-layer").classList.remove("open");
+  rejectApprovalId = "";
+  rejectApprovalProject = "";
+  rejectHasComments = false;
+}
+
+function openRejectDialog(item) {
+  rejectApprovalId = item && item.id ? item.id : "";
+  rejectApprovalProject = (item && item.project) || "";
+  rejectHasComments = hasRemedialComments(item);
+  $("rt-title").textContent = (item && item.task) || "Rejected task";
+  $("rt-text").value = "";
+  $("reject-layer").classList.add("open");
+}
+
+async function retryRejected() {
+  if (!rejectApprovalId) return;
+  const payload = {id: rejectApprovalId, comments: $("rt-text").value};
+  if (rejectApprovalProject) payload.project = rejectApprovalProject;
+  await fetch("/api/tasks/retry", {
+    method: "POST",
+    headers: {"Content-Type": "application/json"},
+    body: JSON.stringify(payload)
+  });
+  closeRejectDialog();
+  loadState();
+}
+
+async function deleteRejected() {
+  if (!rejectApprovalId) return;
+  const payload = {id: rejectApprovalId};
+  if (rejectApprovalProject) payload.project = rejectApprovalProject;
+  await fetch("/api/tasks/delete", {
+    method: "POST",
+    headers: {"Content-Type": "application/json"},
+    body: JSON.stringify(payload)
+  });
+  closeRejectDialog();
+  loadState();
+}
+
+async function acceptRejected() {
+  if (!rejectApprovalId) return;
+  if (rejectHasComments && !confirm("Remedial comments will be ignored.")) return;
+  await fetch("/api/approvals/" + encodeURIComponent(rejectApprovalId) + "/approve", {method: "POST"});
+  closeRejectDialog();
+  loadState();
+}
+
+function bindSplitter() {
+  const split = document.querySelector(".splitter");
+  const body = document.querySelector(".body");
+  if (!split || !body) return;
+  split.addEventListener("pointerdown", (event) => {
+    event.preventDefault();
+    const move = (e) => {
+      const rect = body.getBoundingClientRect();
+      const width = Math.max(220, Math.min(rect.width - 180, rect.right - e.clientX));
+      document.documentElement.style.setProperty("--rail", width + "px");
+    };
+    const up = () => {
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", up);
+    };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
+  });
+}
+
+function bindRailSplitter() {
+  const split = document.querySelector(".rail-splitter");
+  const rail = document.querySelector(".rail");
+  if (!split || !rail) return;
+  split.addEventListener("pointerdown", (event) => {
+    event.preventDefault();
+    const move = (e) => {
+      const rect = rail.getBoundingClientRect();
+      const height = Math.max(100, Math.min(rect.height - 220, e.clientY - rect.top));
+      document.documentElement.style.setProperty("--work", height + "px");
+    };
+    const up = () => {
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", up);
+    };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
+  });
+}
+
+async function openMission(project) {
+  const qs = "/api/mission" + (project ? "?project=" + encodeURIComponent(project) : "");
+  const res = await fetch(qs);
+  const text = res.ok ? await res.text() : "";
+  const win = window.open(
+    "about:blank",
+    "mission-" + encodeURIComponent(project || "") + "-" + Date.now(),
+    "resizable=yes,scrollbars=yes,width=640,height=480"
+  );
+  if (!win) return;
+  win.document.open();
+  win.document.write(
+    "<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\"><title>Mission</title>" +
+    "<style>html,body{height:100%;margin:0;display:flex;flex-direction:column;background:#f8f8f5;color:#1e221f;font-family:ui-sans-serif,system-ui,sans-serif}" +
+    "header{flex:0 0 auto;padding:8px 10px;background:linear-gradient(180deg,#eceee8,#e0e3dc);border-bottom:1px solid #d5d9d2;font-weight:600;font-size:13px}" +
+    "pre{flex:1 1 auto;margin:0;padding:12px;overflow:auto;white-space:pre-wrap;background:#fffef9;font:13px/1.45 ui-sans-serif,system-ui,sans-serif}</style></head><body>" +
+    "<header>" + escapeHtml(project || "Mission") + "</header>" +
+    "<pre id=\"mission-body\">" + escapeHtml(text) + "</pre></body></html>"
+  );
+  win.document.close();
+}
+
+function chatToEnd() {
+  const history = $("chat-history");
+  history.scrollTop = history.scrollHeight;
+}
+
+function chatAtBottom(history) {
+  return (history.scrollHeight - history.scrollTop - history.clientHeight) <= 64;
+}
+
+function statusText(lines) {
+  return (lines || []).slice(0, 2).map((line) => "| " + line).join("\n");
+}
+
+function statusBlock(lines) {
+  const el = document.createElement("div");
+  el.className = "bubble-status";
+  el.textContent = statusText(lines);
+  return el;
+}
+
+function chatTurn(item, statusLines) {
+  const wrap = document.createElement("div");
+  wrap.dataset.chatId = item.id || "";
+  const you = document.createElement("div");
+  you.className = "bubble-you";
+  you.textContent = item.body || "";
+  wrap.appendChild(you);
+  if (item.response) {
+    const reply = document.createElement("div");
+    reply.className = "bubble-ts";
+    reply.textContent = item.response;
+    wrap.appendChild(reply);
+  } else if (statusLines && statusLines.length) {
+    wrap.appendChild(statusBlock(statusLines));
+  }
+  return wrap;
+}
+
+function pendingChatId(items) {
+  const pending = (items || []).filter((item) => item.status === "pending" && !item.response);
+  return pending.length ? pending[pending.length - 1].id : "";
+}
+
+function renderChat(data) {
+  const history = $("chat-history");
+  const items = data.chat || [];
+  const pinBottom = chatAtBottom(history);
+  const live = {};
+  items.forEach((item) => {
+    live[item.id] = true;
+  });
+  [...history.querySelectorAll("[data-chat-id]")].forEach((el) => {
+    if (!live[el.dataset.chatId]) el.remove();
+  });
+  const latestPending = pendingChatId(items);
+  const statusLines = data.lieutenant_status || [];
+  items.forEach((item) => {
+    const showStatus = item.id === latestPending && !item.response;
+    let wrap = history.querySelector("[data-chat-id=\"" + item.id + "\"]");
+    if (!wrap) {
+      history.appendChild(chatTurn(item, showStatus ? statusLines : []));
+      return;
+    }
+    const reply = wrap.querySelector(".bubble-ts");
+    const statusEl = wrap.querySelector(".bubble-status");
+    if (item.response && !reply) {
+      const next = document.createElement("div");
+      next.className = "bubble-ts";
+      next.textContent = item.response;
+      wrap.appendChild(next);
+    } else if (item.response && reply && reply.textContent !== item.response) {
+      reply.textContent = item.response;
+    }
+    if (item.response || !showStatus) {
+      if (statusEl) statusEl.remove();
+    } else {
+      const text = statusText(statusLines);
+      if (!text) {
+        if (statusEl) statusEl.remove();
+      } else if (statusEl) {
+        if (statusEl.textContent !== text) statusEl.textContent = text;
+      } else {
+        wrap.appendChild(statusBlock(statusLines));
+      }
+    }
+  });
+  if (pinBottom) {
+    chatToEnd();
+    requestAnimationFrame(chatToEnd);
+  }
+}
+
+async function sendChat() {
+  const text = $("chat-input").value.trim();
+  if (!text) return;
+  await fetch("/api/chat", {
+    method: "POST",
+    headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({text})
+  });
+  $("chat-input").value = "";
+  loadState();
+}
+
+async function teardownSwarm() {
+  if (!confirm("Stop this swarm? Agent sessions and tmux windows will be terminated. Project files stay on disk.")) return;
+  const btn = $("teardown-btn");
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = "Tearing down…";
+  }
+  try {
+    await fetch("/api/teardown", {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({confirm: "TEARDOWN"})
+    });
+    $("pack-meta").textContent = "Swarm teardown started — this page will go offline.";
+  } catch (_) {
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = "Teardown";
+    }
+  }
+}
+
+$("btn-new-task").onclick = () => openNewTask("");
+$("btn-new-project").onclick = openNewProject;
+$("np-cancel").onclick = closeNewProject;
+$("np-ok").onclick = submitNewProject;
+$("np-name").addEventListener("input", updateInferred);
+$("np-github").addEventListener("change", updateInferred);
+$("btn-open-project").onclick = (event) => {
+  event.stopPropagation();
+  const menu = $("open-project-menu");
+  menu.classList.toggle("open");
+  if (menu.classList.contains("open")) {
+    const list = $("open-project-list");
+    const box = event.currentTarget.getBoundingClientRect();
+    list.style.top = box.bottom + "px";
+    list.style.left = box.left + "px";
+  }
+};
+$("nt-cancel").onclick = closeNewTask;
+$("nt-ok").onclick = submitNewTask;
+$("rt-delete").onclick = deleteRejected;
+$("rt-retry").onclick = retryRejected;
+$("rt-accept").onclick = acceptRejected;
+bindSplitter();
+bindRailSplitter();
+$("teardown-btn").onclick = teardownSwarm;
+$("chat-input").addEventListener("keydown", (event) => {
+  if (event.key === "Enter" && !event.shiftKey) {
+    event.preventDefault();
+    sendChat();
+  }
+});
+document.addEventListener("click", (event) => {
+  if (!event.target.closest(".menu")) {
+    document.querySelectorAll(".menu.open").forEach((el) => {
+      el.classList.remove("open");
+      if (el.dataset.docId) openDocMenus.delete(el.dataset.docId);
+    });
+  }
+  const btn = event.target.closest("[data-open-agent]");
+  if (!btn) return;
+  const role = btn.getAttribute("data-open-agent");
+  const project = btn.getAttribute("data-open-project");
+  if (role) {
+    const qs = project ? "?project=" + encodeURIComponent(project) : "";
+    openAgentWindow("/agent/" + encodeURIComponent(role) + qs,
+                    "agent-" + (project ? project + "-" : "") + role);
+  }
+});
+loadState();
+setInterval(loadState, 2000);
+</script>
+</body>
+</html>

@@ -10,7 +10,7 @@ RUN apt-get update && apt-get install -y \
 USER vscode
 RUN /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)" \
     && eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)" \
-    && brew install borkdude/brew/babashka
+    && brew install borkdude/brew/babashka tmux
 USER root
 
 ENV JAVA_HOME=/usr/lib/jvm/default-java
