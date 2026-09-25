@@ -12,6 +12,7 @@ source and ingester (e.g. EPEX for DE).
 
 from __future__ import annotations
 
+import argparse
 import logging
 from datetime import date, timedelta
 from functools import partial
@@ -62,13 +63,18 @@ def run_opcom_pzu_daily() -> None:
     start = today - timedelta(days=OPCOM_LOOKBACK_DAYS)
     logger.info("Starting daily OPCOM PZU ingest for %s–%s", start, today)
 
-    report = OpcomIngester().ingest("RO", start, today, skip_existing=True)
-    logger.info("OPCOM ingest: %s", report.summary())
-    for failed_date, reason in report.failed:
-        logger.warning("OPCOM gap remains for %s — %s", failed_date, reason)
+    def _ingest() -> None:
+        report = OpcomIngester().ingest("RO", start, today, skip_existing=True)
+        logger.info("OPCOM ingest: %s", report.summary())
+        for failed_date, reason in report.failed:
+            logger.warning("OPCOM gap remains for %s — %s", failed_date, reason)
+
+    _run_safe("OpcomIngest", _ingest)
 
     spark = get_spark()
-    OpcomBronzeWriter().process("RO", start, today, spark)
+    _run_safe(
+        "OpcomBronze", partial(OpcomBronzeWriter().process, "RO", start, today, spark)
+    )
 
     logger.info("Daily OPCOM PZU pipeline complete for %s–%s", start, today)
 
@@ -352,12 +358,48 @@ def run_gold_daily() -> None:
     logger.info("Daily Gold pipeline complete for all markets %s–%s", start, end)
 
 
-if __name__ == "__main__":
+def main(argv: list[str] | None = None) -> None:
+    """CLI entry point.
+
+    With no arguments, runs the full daily pipeline (ingest → bronze →
+    silver → gold) once, in schedule order. ``--job <name>`` instead runs
+    exactly that one job once and exits — a QA/ops affordance for exercising
+    a single job in isolation.
+    """
+    jobs_by_name: dict[str, Callable[[], None]] = {
+        "run_opcom_pzu_daily": run_opcom_pzu_daily,
+        "run_weather_daily": run_weather_daily,
+        "run_entsoe_daily": run_entsoe_daily,
+        "run_fx_rates_daily": run_fx_rates_daily,
+        "run_silver_daily": run_silver_daily,
+        "run_gold_daily": run_gold_daily,
+    }
+
+    parser = argparse.ArgumentParser(description="Run daily pipeline jobs.")
+    parser.add_argument(
+        "--job",
+        choices=sorted(jobs_by_name),
+        help="Run exactly this named daily job once, then exit.",
+    )
+    args = parser.parse_args(argv)
+
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s %(levelname)s %(name)s %(message)s",
+    )
+
+    if args.job:
+        jobs_by_name[args.job]()
+        return
+
     # Manual full pipeline run (ingest → bronze → silver → gold).
-    logging.basicConfig(level=logging.INFO)
     run_weather_daily()
     run_fx_rates_daily()
     run_entsoe_daily()
     run_opcom_pzu_daily()
     run_silver_daily()
     run_gold_daily()
+
+
+if __name__ == "__main__":
+    main()
