@@ -8,6 +8,8 @@ must not raise out of the job.
 
 from __future__ import annotations
 
+from datetime import date
+from functools import partial
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -45,6 +47,24 @@ class TestRunOpcomPzuDailyErrorIsolation:
         jobs.run_opcom_pzu_daily()
 
         mock_writer_cls.return_value.process.assert_called_once()
+
+    @patch("shiden.processing.spark.get_spark")
+    @patch("shiden.processing.bronze.opcom.OpcomBronzeWriter")
+    @patch("shiden.ingestion.opcom.OpcomIngester")
+    def test_partial_ingest_failure_logs_gap_warning_per_date(
+        self, mock_ingester_cls, mock_writer_cls, mock_get_spark, caplog
+    ):
+        gap_date = date(2026, 1, 5)
+        mock_ingester_cls.return_value.ingest.return_value = MagicMock(
+            failed=[(gap_date, "upstream 500")], summary=lambda: "failed=1"
+        )
+        mock_get_spark.return_value = MagicMock()
+
+        with caplog.at_level("INFO"):
+            jobs.run_opcom_pzu_daily()
+
+        warnings = [r.getMessage() for r in caplog.records if r.levelname == "WARNING"]
+        assert any(str(gap_date) in m and "upstream 500" in m for m in warnings)
 
     @patch("shiden.processing.spark.get_spark")
     @patch("shiden.processing.bronze.opcom.OpcomBronzeWriter")
@@ -95,9 +115,7 @@ class TestMainJobDispatch:
     def _patch_all_jobs(self, monkeypatch):
         calls: list[str] = []
         for name in self._JOB_NAMES:
-            monkeypatch.setattr(
-                jobs, name, (lambda n: lambda: calls.append(n))(name)
-            )
+            monkeypatch.setattr(jobs, name, partial(calls.append, name))
         return calls
 
     @pytest.mark.parametrize("job_name", _JOB_NAMES)
