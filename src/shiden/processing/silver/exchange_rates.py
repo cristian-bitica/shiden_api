@@ -5,7 +5,7 @@ truth for currency conversion in Silver and Gold.  One row per
 (date, base_currency, quote_currency); base is always the market's reporting
 currency (EUR today).
 
-Sources per market (from the MARKETS config registry):
+Sources per market (from the MARKETS config registry)::
 
     fx_source=BNR        bronze/bnr_fx_rates  (authoritative Romanian rate;
                          ECB used as fallback for dates BNR is missing)

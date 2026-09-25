@@ -34,12 +34,16 @@ app = FastAPI(
     description=DESCRIPTION,
     version="0.1.0",
 )
+"""The ASGI application — ``uvicorn shiden.api.main:app``."""
 
 app.add_middleware(UsageMeteringMiddleware)
 
-# Every /v1 route carries {market_id}, so entitlement is enforced once here
-# rather than being re-declared (and eventually forgotten) on each handler.
 market_scoped = [Depends(require_market_access)]
+"""Router-level entitlement check.
+
+Every ``/v1`` route carries ``{market_id}``, so entitlement is enforced once
+here rather than being re-declared (and eventually forgotten) on each handler.
+"""
 
 app.include_router(
     prices.router, prefix="/v1/prices", tags=["prices"], dependencies=market_scoped

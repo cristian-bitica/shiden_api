@@ -36,3 +36,13 @@ spark-warehouse/
 Thumbs.db
 
 .coverage*
+
+# Sphinx (build output + generated API stubs + generated OpenAPI contract)
+docs/_build/
+docs/reference/_autosummary/
+docs/_static/openapi.json
+
+.worktrees/
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/

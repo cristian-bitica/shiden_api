@@ -41,10 +41,11 @@ def get_signals(market_id: str, date: date) -> SignalsResponse:
     """
     Full 96-slot (15-min) BESS charge/discharge/idle signal list for one day.
 
-    signal values:
-      -1 = charge  (lowest N price intervals of the day)
-       0 = idle
-      +1 = discharge (highest N price intervals of the day)
+    signal values::
+
+        -1 = charge  (lowest N price intervals of the day)
+         0 = idle
+        +1 = discharge (highest N price intervals of the day)
     """
     require_market(market_id)
     df = _load_day(market_id, date)

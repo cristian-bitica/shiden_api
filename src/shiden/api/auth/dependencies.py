@@ -29,9 +29,12 @@ from shiden.config.settings import settings
 
 API_KEY_HEADER = "X-API-Key"
 
-# auto_error=False so we can emit our own message rather than FastAPI's
-# terse "Not authenticated", and so the auth-disabled path can short-circuit.
 _header_scheme = APIKeyHeader(name=API_KEY_HEADER, auto_error=False)
+"""OpenAPI security scheme for the ``X-API-Key`` header.
+
+``auto_error=False`` so we can emit our own message rather than FastAPI's
+terse "Not authenticated", and so the auth-disabled path can short-circuit.
+"""
 
 
 @dataclass(frozen=True)
