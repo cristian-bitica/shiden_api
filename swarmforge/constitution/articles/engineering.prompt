@@ -8,6 +8,7 @@
   - Go: install with `go install`; mutation `github.com/unclebob/mutate4go`, CRAP `github.com/unclebob/crap4go`, DRY `github.com/unclebob/dry4go`.
   - Clojure: install with Clojure CLI/deps.edn; mutation `github.com/unclebob/clj-mutate`, CRAP `github.com/unclebob/crap4clj`, DRY `github.com/unclebob/dry4clj`.
   - Java: install with Maven (`mvn`); mutation `github.com/unclebob/mutate4java`, CRAP `github.com/unclebob/crap4java`, DRY `github.com/unclebob/dry4java`.
+  - Python: install with `uv`/`pip`; mutation `mutmut`, CRAP `radon` (cyclomatic complexity/maintainability index as the CRAP proxy) paired with `coverage.py` for coverage, DRY `pylint`'s duplicate-code checker (`R0801`).
 
 ## Language Defaults
 - For Clojure projects, prefer Babashka where possible.
