@@ -1,6 +1,6 @@
 # Command-line reference
 
-Three entry points, all invoked as modules so they pick up the project
+Four entry points, all invoked as modules so they pick up the project
 environment via `uv run`.
 
 ## `shiden.backfill`
@@ -32,6 +32,22 @@ Europe/Bucharest time. Takes no arguments; blocks until interrupted.
 ```bash
 uv run python -m shiden.scheduler.runner
 ```
+
+## `shiden.scheduler.jobs`
+
+Run the daily pipeline once, outside the scheduler: the full sequence by
+default, or a single named job with `--job`.
+
+```bash
+uv run python -m shiden.scheduler.jobs [--job NAME]
+```
+
+| Flag | Default | Description |
+|---|---|---|
+| `--job NAME` | none — runs the full pipeline | Run exactly one job once, then exit. One of `run_opcom_pzu_daily`, `run_weather_daily`, `run_entsoe_daily`, `run_fx_rates_daily`, `run_silver_daily`, `run_gold_daily` |
+
+Each job logs a failing step as an `ERROR` and continues rather than
+raising, so the process exits `0` even when a step fails partway through.
 
 ## `shiden.api.auth.cli`
 
