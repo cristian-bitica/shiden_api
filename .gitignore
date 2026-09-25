@@ -46,3 +46,7 @@ docs/_static/openapi.json
 .mypy_cache/
 .pytest_cache/
 .ruff_cache/
+
+# Hardening tool scratch (mutmut working copy, project tmp/ scratch dir)
+mutants/
+/tmp/

@@ -32,6 +32,10 @@ dev = [
     "pytest-asyncio>=0.23.0",
     "ruff>=0.4.0",
     "mypy>=1.10.0",
+    "mutmut>=3.8.0",
+    "radon>=6.0.1",
+    "pylint>=4.0.9",
+    "coverage>=7.16.1",
 ]
 docs = [
     "sphinx>=7.3.0",
@@ -60,6 +64,12 @@ select = ["E", "F", "I"]
 "src/shiden/processing/silver/dimensions/dim_production_type.py" = ["E501"]
 "src/shiden/processing/gold/gold_generation_hourly.py" = ["E501"]
 "tests/**" = ["E501"]
+
+[tool.mutmut]
+# Differential: mutate only the file(s) under active hardening, not the
+# whole tree. Update only_mutate per hardening task.
+only_mutate = ["src/shiden/scheduler/jobs.py"]
+pytest_add_cli_args_test_selection = ["tests/unit/test_scheduler_jobs.py"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
