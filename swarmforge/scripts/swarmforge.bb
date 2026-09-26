@@ -530,7 +530,7 @@
            " " (sq (:tmux-socket ctx))
            " " (sq (str (:window-ids-file ctx)))
            (apply str (map #(str " " (sq (:session %))) (:roles ctx)))
-           " >/dev/null 2>&1 &!; exit $exit_code"))))
+           " >/dev/null 2>&1 & disown; exit $exit_code"))))
 
 (defn codex-home []
   (or (not-empty (System/getenv "CODEX_HOME"))
