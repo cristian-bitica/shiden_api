@@ -70,9 +70,11 @@ For each `<job>` row in the Examples table:
 - `run_weather_daily`, `run_entsoe_daily`, `run_fx_rates_daily`,
   `run_silver_daily`, and `run_gold_daily` are expected to already pass today
   (regression coverage — do not weaken these rows to make the suite green).
-- `run_opcom_pzu_daily` is expected to fail today (unhandled traceback,
-  nonzero exit) until coder fixes it to match the other five jobs' error
-  isolation. Do not adjust this procedure to accept that failure.
+- `run_opcom_pzu_daily` originally failed this procedure (unhandled
+  traceback, nonzero exit) until coder wrapped its ingest/bronze steps in
+  `_run_safe` to match the other five jobs' error isolation. QA has
+  verified all six rows now pass; do not adjust this procedure to accept
+  a future regression on this row.
 - `--job <job>` does not exist yet on `shiden.scheduler.jobs`; it is a
   required user-interface affordance for this QA suite. Add it (argparse,
   one job name → one function call, then exit) rather than importing job
