@@ -50,9 +50,6 @@ For each `<job>` row in the Examples table:
 - The captured output contains at least one `ERROR` line naming the failing
   step (job-specific ingest/processing step logs an ERROR, not a WARNING or
   silence).
-- The captured output does **not** contain an unhandled Python traceback
-  (no `Traceback (most recent call last):`) — the exception must be caught
-  and logged, not propagated out of the job.
 - The captured output contains the job's own "complete" log line (each job
   logs a "... pipeline complete ..." message at the end of its function) —
   proof the job ran to completion instead of aborting partway through.
@@ -80,3 +77,10 @@ For each `<job>` row in the Examples table:
   required user-interface affordance for this QA suite. Add it (argparse,
   one job name → one function call, then exit) rather than importing job
   functions directly into the QA script.
+- `_run_safe` logs a caught step failure with `exc_info=True` by design
+  (asserted in `tests/unit/test_scheduler_jobs.py`, hardened by mutation
+  testing), so a correctly isolated failure's captured output legitimately
+  contains a `Traceback (most recent call last):` block. Do not treat that
+  text as a failure signal; rely on exit code 0, the `ERROR` line, and the
+  "... pipeline complete ..." line instead. Confirmed with operator
+  2026-09-26.
